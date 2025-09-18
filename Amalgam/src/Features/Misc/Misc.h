@@ -25,6 +25,12 @@ private:
 	bool m_bPeekPlaced = false;
 	Vec3 m_vPeekReturnPos = {};
 
+	// Disguise helpers
+	void TryAutoDisguise(CTFPlayer* pLocal);
+	void DisguiseAsConfiguredClass(CTFPlayer* pLocal);
+	bool IsSpyWithKnife(CTFPlayer* pLocal);
+	bool IsDisguised(CTFPlayer* pLocal);
+
 	//bool bSteamCleared = false;
 
 public:

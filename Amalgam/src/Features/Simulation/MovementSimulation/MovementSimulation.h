@@ -60,6 +60,7 @@ struct PlayerStorage
 	PlayerData m_PlayerData = {};
 
 	float m_flAverageYaw = 0.f;
+	float m_flAverageYawConfidence = 0.f;
 	bool m_bBunnyHop = false;
 
 	float m_flSimTime = 0.f;
@@ -69,6 +70,8 @@ struct PlayerStorage
 
 	bool m_bPredictNetworked = true;
 	Vec3 m_vPredictedOrigin = {};
+
+	float m_flStability = 0.f;
 
 	std::vector<Vec3> m_vPath = {};
 
@@ -95,6 +98,12 @@ private:
 	void GetAverageYaw(PlayerStorage& tStorage, int iSamples);
 	bool StrafePrediction(PlayerStorage& tStorage, int iSamples);
 
+	float PredictAirYawPerTick(const PlayerStorage& tStorage, float avgYaw) const;
+	float GetGroundTurnScale(const PlayerStorage& tStorage, float avgYaw) const;
+	void   ComputeYawResidualAndConfidence(const std::deque<MoveData>& recs, int usedTicks, float estYawPerTick, float& outResidualRMS, float& outConfidence) const;
+	int    ComputeStabilityScore(const std::deque<MoveData>& recs, int window) const; // returns a non-negative score
+	float  EstimateCurvatureYawPerTick(const std::deque<MoveData>& recs, int maxSamples, int& outUsedTicks) const;
+
 	void SetBounds(CTFPlayer* pPlayer);
 	void RestoreBounds(CTFPlayer* pPlayer);
 
@@ -104,6 +113,16 @@ private:
 
 	std::unordered_map<int, std::deque<MoveData>> m_mRecords = {};
 	std::unordered_map<int, std::deque<float>> m_mSimTimes = {};
+
+	// exponential moving average for predicted delta to reduce jitter
+	// alpha chosen from spec (e.g. 0.35f), configurable via cvar cluster if needed later
+	float m_flDeltaEMA = 0.f;
+	bool  m_bDeltaEMAInit = false;
+
+	// cached last friction scale applied (for future metric collection / clamping diagnostics)
+	float m_flLastFrictionScale = 1.f;
+	float ClampFriction(float rawScale) const;
+	float SmoothDelta(float newDelta);
 
 public:
 	void Store();

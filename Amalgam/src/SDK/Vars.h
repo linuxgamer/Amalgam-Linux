@@ -349,6 +349,10 @@ namespace Vars
 
 			CVar(VelocityAverageCount, "Velocity average count", 5, NOSAVE | DEBUGVAR, 1, 10);
 			CVar(VerticalShift, "Vertical shift", 5.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 10.f, 0.5f);
+			CVar(FeetZBoostPipes, "Feet Z-boost (pipes)", 8.f, SLIDER_MIN | SLIDER_PRECISION, 0.f, 20.f, 0.5f);
+			CVar(FeetZBoostPipesDynamic, "Feet Z-boost dynamic", true);
+			CVar(FeetZBoostPipesDynScale, "Feet Z-boost dyn scale", 2.0f, SLIDER_MIN | SLIDER_PRECISION, 0.f, 10.f, 0.25f, "%gu/1000");
+			CVar(FeetZBoostPipesDynMax, "Feet Z-boost dyn max", 12.0f, SLIDER_MIN | SLIDER_PRECISION, 0.f, 20.f, 0.5f);
 			CVar(DragOverride, "Drag override", 0.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 1.f, 0.01f);
 			CVar(TimeOverride, "Time override", 0.f, NOSAVE | DEBUGVAR | SLIDER_MIN | SLIDER_PRECISION, 0.f, 2.f, 0.01f);
 			CVar(HuntsmanLerp, "Huntsman lerp", 50.f, NOSAVE | DEBUGVAR | SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 1.f, "%g%%");
@@ -378,6 +382,11 @@ namespace Vars
 			CVarEnum(MovesimFrictionFlags, "Movesim friction flags", 0b01, NOSAVE | DEBUGVAR | DROPDOWN_MULTI, nullptr,
 				VA_LIST("Run reduce", "Calculate increase"),
 				RunReduce = 1 << 0, CalculateIncrease = 1 << 1);
+
+			CVar(UseCurvatureFit, "Use curvature fit", false);
+			CVar(AirForwardModelBlend, "Air forward model blend", 0.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 1.f, 0.1f);
+			CVar(GroundTurnScaleK, "Ground turn scale K", 0.f, SLIDER_MIN | SLIDER_PRECISION, 0.f, 0.005f, 0.0005f);
+			CVar(UseStabilityMinSamples, "Use stability min samples", false);
 		SUBNAMESPACE_END(Projectile);
 
 		SUBNAMESPACE_BEGIN(Melee)
@@ -398,6 +407,12 @@ namespace Vars
 				None, PrioritizeTeam, PrioritizeFriends, FriendsOnly);
 			CVar(AutoHeal, "Auto heal", false);
 			CVar(AutoArrow, "Auto arrow", false);
+			CVar(AutoArrowHealthThreshold, "Auto arrow health threshold", 50.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 5.f, "%g%%");
+			CVar(AutoArrowCooldown, "Auto arrow cooldown", 1.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 10.f, 0.5f, "%gs");
+			CVar(AutoArrowCriticalThreshold, "Auto arrow critical threshold", 35.f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 100.f, 5.f, "%g%%");
+			CVar(AutoArrowForceOnCritical, "Auto arrow force on critical", true);
+			CVar(AutoArrowAnticipateDamage, "Auto arrow anticipate damage", true);
+			CVar(AutoArrowDangerThreshold, "Auto arrow danger threshold", 0.3f, SLIDER_CLAMP | SLIDER_PRECISION, 0.f, 1.5f, 0.05f);
 			CVar(AutoRepair, "Auto repair", false);
 			CVar(AutoSandvich, "Auto sandvich", false);
 			CVar(AutoVaccinator, "Auto vaccinator", false);
@@ -724,6 +739,11 @@ namespace Vars
 			CVar(AutoF2Ignored, "Auto F2 ignored", false);
 			CVar(AutoF1Priority, "Auto F1 priority", false);
 			CVar(AcceptItemDrops, "Auto accept item drops", false);
+			CVar(DisguiseAfterBackstab, "Disguise after backstab", false);
+			CVar(AutoDisguiseIfUndisguised, "Auto disguise", false);
+			CVarEnum(DisguiseClass, "Disguise class", 0, NONE, nullptr,
+				VA_LIST("Scout", "Soldier", "Pyro", "Demoman", "Heavy", "Engineer", "Medic", "Sniper", "Spy"),
+				Scout, Soldier, Pyro, Demoman, Heavy, Engineer, Medic, Sniper, Spy);
 		SUBNAMESPACE_END(Automation);
 
 		SUBNAMESPACE_BEGIN(Exploits)
@@ -739,7 +759,6 @@ namespace Vars
 		SUBNAMESPACE_BEGIN(Game)
 			CVar(AntiCheatCompatibility, "Anti-cheat compatibility", false);
 			CVar(F2PChatBypass, "F2P chat bypass", false);
-			CVar(VACBypass, "Insecure dialog bypass", false);
 			CVar(NetworkFix, "Network fix", false);
 			CVar(SetupBonesOptimization, "Bones optimization", false);
 

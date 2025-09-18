@@ -1,28 +1,39 @@
-<div align="center">
+# Amalgam Kaizer
 
-  # Amalgam-Linux
+## Update Changelog
 
-### Amalgam fork primarily made for running in GNU/Linux
+### Recent Updates
 
-</div>
-Allows joining VAC secured servers while having VAC disabled (using launch parameter).
-It can be used in w*ndows if wanted.
-</div>
+**Core Improvements**
+- **Movement Simulation (MoveSim)**: Significantly improved accuracy and consistency
+- **Auto Backstab**: Improved consistency (hold W and reap the rewards)
+- **Auto Disguise**: New feature added
 
-# Guide for injecting it:
-1. Install Protontricks
-2. [This](https://github.com/adamhlt/DLL-Injector) (64 bit version) injector is recommended.
-3. **IMPORTANT: Put cheat and injector into proton prefix (path will be like this: ```/home/<your username>/.local/share/Steam/steamapps/compatdata/440/pfx/drive_c/```)**
-4. Launch the game
-5. While the game is opened, open WINECMD in TF2's proton prefix using protontricks (appid is 440)
-6. Now, type this command: ```<injector name> <cheat name> tf_win64.exe```
-7. Amalgam should be injected! Game can get crashed during injecting first time, just try again.
+### Update History
 
-</div>
+**September 17, 2024**
+- **Auto Switch for Bow**: Added with customizable settings (rijin like logic)
 
-## Known issues:
-1. Access denied crashes (general TF2 and amalgam bug).
-2. You are running in insecure mode message (Solution: Make sure you have "Insecure bypass" option enabled.
+**September 16, 2024**
+- **Demo Improvements**:
+  - Better arc calculations
+  - Improved feet aim for pipes
+- **Auto Heal**: Improved functionality *(feedback is welcome)*
 
-## If you want to contribute:
-If you have an improvment or a fix just create a pull request (they are autoaccepted) but make sure your changes are **not** buggy and wont break with next amalgam update
+**September 11, 2024**
+- **MoveSim**: Additional upgrades implemented
+
+### Technical Fixes
+
+**Recent Fixes**
+- **Kasa Fit**: Fixed match calcs
+- **MoveSim Data**: Removed smoothing/heuristics, now uses raw data for much more accurate simulation
+- **Loose Cannon**: Fixed gravity calculations
+
+**Known Issues**
+- **Performance**: FPS drops after extended play time (fix in progress)
+
+### Completed Tasks
+- ~~Auto switch for autobow (rijin request)~~ **COMPLETED** (Sept 17)
+
+[VAC bypass](https://github.com/danielkrupinski/VAC-Bypass-Loader) and [Xenos](https://github.com/DarthTon/Xenos/releases) recommended. 

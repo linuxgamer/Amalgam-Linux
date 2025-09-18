@@ -78,6 +78,8 @@ private:
 public:
 	void Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	float GetSplashRadius(CTFWeaponBase* pWeapon, CTFPlayer* pPlayer);
+	int GetLastTickCancel() { return m_iLastTickCancel; }
+	void SetLastTickCancel(int v) { m_iLastTickCancel = v; }
 	
 	bool AutoAirblast(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, CBaseEntity* pProjectile);
 	float GetSplashRadius(CBaseEntity* pProjectile, CTFWeaponBase* pWeapon = nullptr, CTFPlayer* pPlayer = nullptr, float flScale = 1.f, CTFWeaponBase* pAirblast = nullptr);

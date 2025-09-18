@@ -14,10 +14,14 @@ std::vector<Target_t> CAimbotMelee::GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 
 	if (Vars::Aimbot::General::Target.Value & Vars::Aimbot::General::TargetEnum::Players)
 	{
-		auto eGroupType = !F::AimbotGlobal.FriendlyFire() || Vars::Aimbot::General::Ignore.Value & Vars::Aimbot::General::IgnoreEnum::Team ? EGroupType::PLAYERS_ENEMIES : EGroupType::PLAYERS_ALL;
-		if (Vars::Aimbot::Melee::WhipTeam.Value &&
-			!F::AimbotGlobal.FriendlyFire() && SDK::AttribHookValue(0, "speed_buff_ally", pWeapon) > 0)
-			eGroupType = EGroupType::PLAYERS_ALL;
+		auto eGroupType = EGroupType::GROUP_INVALID;
+		if (Vars::Aimbot::General::Target.Value & Vars::Aimbot::General::TargetEnum::Players)
+		{
+			eGroupType = !F::AimbotGlobal.FriendlyFire() || Vars::Aimbot::General::Ignore.Value & Vars::Aimbot::General::IgnoreEnum::Team ? EGroupType::PLAYERS_ENEMIES : EGroupType::PLAYERS_ALL;
+			if (Vars::Aimbot::Melee::WhipTeam.Value &&
+				!F::AimbotGlobal.FriendlyFire() && SDK::AttribHookValue(0, "speed_buff_ally", pWeapon) > 0)
+				eGroupType = EGroupType::PLAYERS_ALL;
+		}
 
 		for (auto pEntity : H::Entities.GetGroup(eGroupType))
 		{
@@ -38,20 +42,18 @@ std::vector<Target_t> CAimbotMelee::GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 		}
 	}
 
+	if (Vars::Aimbot::General::Target.Value)
 	{
-		auto eGroupType = EGroupType::GROUP_INVALID;
-		if (Vars::Aimbot::General::Target.Value & Vars::Aimbot::General::TargetEnum::Building)
-			eGroupType = EGroupType::BUILDINGS_ENEMIES;
-		bool bWrench = pWeapon->GetWeaponID() == TF_WEAPON_WRENCH, bSapper = SDK::AttribHookValue(0, "set_dmg_apply_to_sapper", pWeapon);
-		if (Vars::Aimbot::Healing::AutoRepair.Value && (bWrench || bSapper))
-			eGroupType = eGroupType != EGroupType::GROUP_INVALID ? EGroupType::BUILDINGS_ALL : EGroupType::BUILDINGS_TEAMMATES;
-		for (auto pEntity : H::Entities.GetGroup(eGroupType))
+		bool bWrench = pWeapon->GetWeaponID() == TF_WEAPON_WRENCH;
+		bool bDestroySapper = pWeapon->GetWeaponID() == TF_WEAPON_FIREAXE && SDK::AttribHookValue(0, "set_dmg_apply_to_sapper", pWeapon);
+
+		for (auto pEntity : H::Entities.GetGroup(bWrench || bDestroySapper ? EGroupType::BUILDINGS_ALL : EGroupType::BUILDINGS_ENEMIES))
 		{
 			if (F::AimbotGlobal.ShouldIgnore(pEntity, pLocal, pWeapon))
 				continue;
 
 			bool bTeam = pEntity->m_iTeamNum() == pLocal->m_iTeamNum();
-			if (bTeam && (bWrench && !AimFriendlyBuilding(pEntity->As<CBaseObject>()) || bSapper && !pEntity->As<CBaseObject>()->m_bHasSapper()))
+			if (bTeam && (bWrench && !AimFriendlyBuilding(pEntity->As<CBaseObject>()) || bDestroySapper && !pEntity->As<CBaseObject>()->m_bHasSapper()))
 				continue;
 
 			Vec3 vPos = pEntity->GetCenter();
@@ -60,23 +62,8 @@ std::vector<Target_t> CAimbotMelee::GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 			if (flFOVTo > Vars::Aimbot::General::AimFOV.Value)
 				continue;
 
-			int iPriority = 0;
-			if (bTeam)
-			{
-				int iOwner = pEntity->As<CBaseObject>()->m_hBuilder().GetEntryIndex();
-				switch (Vars::Aimbot::Healing::HealPriority.Value)
-				{
-				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeFriends:
-					if (iOwner == I::EngineClient->GetLocalPlayer() || H::Entities.IsFriend(iOwner) || H::Entities.InParty(iOwner))
-						iPriority = std::numeric_limits<int>::max();
-					break;
-				case Vars::Aimbot::Healing::HealPriorityEnum::PrioritizeTeam:
-					iPriority = std::numeric_limits<int>::max();
-				}
-			}
-
 			float flDistTo = vLocalPos.DistTo(vPos);
-			vTargets.emplace_back(pEntity, pEntity->IsSentrygun() ? TargetEnum::Sentry : pEntity->IsDispenser() ? TargetEnum::Dispenser : TargetEnum::Teleporter, vPos, vAngleTo, flFOVTo, flDistTo, iPriority);
+			vTargets.emplace_back(pEntity, pEntity->IsSentrygun() ? TargetEnum::Sentry : pEntity->IsDispenser() ? TargetEnum::Dispenser : TargetEnum::Teleporter, vPos, vAngleTo, flFOVTo, flDistTo);
 		}
 	}
 
@@ -231,65 +218,76 @@ void CAimbotMelee::UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCm
 
 bool CAimbotMelee::CanBackstab(CBaseEntity* pTarget, CTFPlayer* pLocal, Vec3 vEyeAngles)
 {
+	// Basic validation
 	if (!pTarget->IsPlayer() || pTarget->m_iTeamNum() == pLocal->m_iTeamNum())
 		return false;
 
+	// Respect razorback / one-time backstab shield (if requested to ignore those targets)
 	if (Vars::Aimbot::Melee::IgnoreRazorback.Value)
 	{
 		CUtlVector<CBaseEntity*> itemList;
-		int iBackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", pTarget, &itemList);
+		const int iBackstabShield = SDK::AttribHookValue(0, "set_blockbackstab_once", pTarget, &itemList);
 		if (iBackstabShield && itemList.Count())
 		{
-			CBaseEntity* pEntity = itemList.Element(0);
-			if (pEntity && pEntity->ShouldDraw())
-				return false;
+			if (CBaseEntity* pEntity = itemList.Element(0); pEntity && pEntity->ShouldDraw())
+				return false; // Active shield found – treat as non-backstabbable
 		}
 	}
 
+	// 2D planar vector towards target (ignoring vertical difference, mirroring game logic)
 	Vec3 vToTarget = (pTarget->GetAbsOrigin() - m_vEyePos).To2D();
 	const float flDist = vToTarget.Normalize();
-	if (!flDist)
+	if (flDist <= 0.f)
 		return false;
 
-	float flTolerance = 0.0625f;
-	float flExtra = 2.f * flTolerance / flDist; // account for origin compression
+	// these mirrors source engine backstab checks, compensating for origin compression at close range
+	// (check CTFKnife::CanPerformBackstab in leaked / public tf2 ref)
+	constexpr float kOriginCompression = 0.0625f;          // world coord packet compression quantum (1/16th)
+	constexpr float kTargetViewBaseMinDot = 0.0031f;       // tiny bias
+	constexpr float kOwnerVsTargetMinBase = 0.5f;          // must at least be somewhat facing target
+	constexpr float kViewForwardMinBase = -0.2969f;        // original -> -0.3f + 0.0031f
 
-	float flPosVsTargetViewMinDot = 0.f + 0.0031f + flExtra;
-	float flPosVsOwnerViewMinDot = 0.5f + flExtra;
-	float flViewAnglesMinDot = -0.3f + 0.0031f; // 0.00306795676297 ?
+	// extra looseness from compression
+	float flExtra = (2.f * kOriginCompression) / flDist;   // increase tolerance slightly when very close
 
-	auto TestDots = [&](Vec3 vTargetAngles)
-		{
-			Vec3 vOwnerForward; Math::AngleVectors(vEyeAngles, &vOwnerForward);
-			vOwnerForward.Normalize2D();
+	// precompute forward vector of owner once
+	Vec3 vOwnerForward; Math::AngleVectors(vEyeAngles, &vOwnerForward); vOwnerForward.Normalize2D();
 
-			Vec3 vTargetForward; Math::AngleVectors(vTargetAngles, &vTargetForward);
-			vTargetForward.Normalize2D();
+	const float flPosVsTargetViewMinDot = kTargetViewBaseMinDot + flExtra;   // Are we behind them (from their POV)?
+	const float flPosVsOwnerViewMinDot = kOwnerVsTargetMinBase + flExtra;    // Are we facing (generally) toward them?
+	const float flViewAnglesMinDot = kViewForwardMinBase; // maintain original threshold
 
-			const float flPosVsTargetViewDot = vToTarget.Dot(vTargetForward); // Behind?
-			const float flPosVsOwnerViewDot = vToTarget.Dot(vOwnerForward); // Facing?
-			const float flViewAnglesDot = vTargetForward.Dot(vOwnerForward); // Facestab?
+	auto TestDots = [&](const Vec3& vTargetAngles) -> bool
+	{
+		Vec3 vTargetForward; Math::AngleVectors(vTargetAngles, &vTargetForward); vTargetForward.Normalize2D();
 
-			return flPosVsTargetViewDot > flPosVsTargetViewMinDot && flPosVsOwnerViewDot > flPosVsOwnerViewMinDot && flViewAnglesDot > flViewAnglesMinDot;
-		};
+		const float flPosVsTargetViewDot = vToTarget.Dot(vTargetForward); // > means we're behind their view
+		const float flPosVsOwnerViewDot = vToTarget.Dot(vOwnerForward);   // > means we're looking toward them
+		const float flViewAnglesDot = vTargetForward.Dot(vOwnerForward);  // > means not an extreme facestab
 
+		return (flPosVsTargetViewDot > flPosVsTargetViewMinDot)
+			&& (flPosVsOwnerViewDot > flPosVsOwnerViewMinDot)
+			&& (flViewAnglesDot > flViewAnglesMinDot);
+	};
+
+	// Base (current) target yaw
 	Vec3 vTargetAngles = { 0.f, H::Entities.GetEyeAngles(pTarget->entindex()).y, 0.f };
+
 	if (!Vars::Aimbot::Melee::BackstabAccountPing.Value)
 	{
-		if (!TestDots(vTargetAngles))
-			return false;
+		return TestDots(vTargetAngles);
 	}
 	else
 	{
+		// double test mode -> require both real & ping-adjusted angles to be valid (stricter – reduces false positives)
 		if (Vars::Aimbot::Melee::BackstabDoubleTest.Value && !TestDots(vTargetAngles))
 			return false;
 
-		vTargetAngles.y += H::Entities.GetPingAngles(pTarget->entindex()).y;
-		if (!TestDots(vTargetAngles))
-			return false;
+		// apply estimated remote view yaw shift
+		const float flPingAdjust = H::Entities.GetPingAngles(pTarget->entindex()).y;
+		vTargetAngles.y = Math::NormalizeAngle(vTargetAngles.y + flPingAdjust);
+		return TestDots(vTargetAngles);
 	}
-
-	return true;
 }
 
 int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
@@ -304,11 +302,6 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 		flRange *= pLocal->m_flModelScale();
 		flHull *= pLocal->m_flModelScale();
 	}
-	if (pWeapon->GetWeaponID() == TF_WEAPON_WRENCH && tTarget.m_pEntity->m_iTeamNum() == pLocal->m_iTeamNum())
-	{
-		flRange = 70;
-		flHull = 18;
-	}
 	Vec3 vSwingMins = { -flHull, -flHull, -flHull };
 	Vec3 vSwingMaxs = { flHull, flHull, flHull };
 	auto& vSimRecords = m_mRecordMap[tTarget.m_pEntity->entindex()];
@@ -318,9 +311,21 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 	{
 		if (!vRecords.empty())
 		{
+			// append simulated future path nodes as predicted records with progressive future sim times
+			int iIdx = 0;
 			for (auto& tRecord : vSimRecords)
+			{
+				// mark as predicted (future) so backtrack can apply different tolerance
+				// ensure monotonic increase beyond last historical record
+				auto flLastTime = vRecords.front()->m_flSimTime; // records kept newest at front
+				if (tRecord.m_flSimTime <= flLastTime)
+					tRecord.m_flSimTime = flLastTime + TICKS_TO_TIME(++iIdx);
+				tRecord.m_bPredicted = true;
 				vRecords.push_back(&tRecord);
-			vRecords = F::Backtrack.GetValidRecords(vRecords, pLocal, true, -TICKS_TO_TIME(vSimRecords.size()));
+			}
+			// allow up to melee swing time into future (range based on sim records count)
+			float flFutureTol = TICKS_TO_TIME(std::min<int>(vSimRecords.size(), 16));
+			vRecords = F::Backtrack.GetValidRecords(vRecords, pLocal, true, 0.f, true, flFutureTol);
 		}
 		if (vRecords.empty())
 			return false;

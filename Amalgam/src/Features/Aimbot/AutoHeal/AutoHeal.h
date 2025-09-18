@@ -8,6 +8,7 @@ class CAutoHeal
 private:
 	void ActivateOnVoice(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUserCmd* pCmd);
 	void AutoVaccinator(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUserCmd* pCmd);
+	void AutoCbowHealSwitch(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUserCmd* pCmd);
 	void GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBulletDanger, float& flBlastDanger, float& flFireDanger);
 	void SwapResistType(CUserCmd* pCmd, int iType);
 	void ActivateResistType(CUserCmd* pCmd, int iType);
@@ -22,6 +23,10 @@ private:
 	float m_flDamagedDPS = -1;
 	float m_flDamagedTime = 0.f;
 
+	// Auto arrow control
+	float m_flNextArrowSwitch = 0.f; // tiny anti-flap
+	float m_flLastArrowShot = 0.f;
+
 #ifdef DEBUG_VACCINATOR
 	std::vector<std::pair<float, int>> vResistDangers = {};
 #endif
@@ -34,6 +39,9 @@ public:
 #endif
 
 	std::unordered_map<int, bool> m_mMedicCallers = {};
+
+	// Expose arrow shot timestamp setter for alternating logic
+	void NoteArrowShot(float flTime) { m_flLastArrowShot = flTime; }
 };
 
 ADD_FEATURE(CAutoHeal, AutoHeal);

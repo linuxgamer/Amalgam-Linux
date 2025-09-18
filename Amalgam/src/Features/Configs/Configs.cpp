@@ -291,6 +291,9 @@ CConfigs::CConfigs()
 
 #define IsType(t) pBase->m_iType == typeid(t).hash_code()
 
+// Controls whether missing vars should be logged during config load
+static bool s_LogMissingVars = false;
+
 template <class T>
 static inline void SaveMain(BaseVar*& pBase, boost::property_tree::ptree& tTree)
 {
@@ -323,7 +326,11 @@ static inline void LoadMain(BaseVar*& pBase, boost::property_tree::ptree& tTree)
 		}
 	}
 	else if (!(pVar->m_iFlags & NOSAVE))
-		SDK::Output("Amalgam", std::format("{} not found", pVar->m_sName).c_str(), { 175, 150, 255, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+	{
+		if (s_LogMissingVars)
+			SDK::Output("Amalgam", std::format("{} not found", pVar->m_sName).c_str(), { 175, 150, 255, 127 }, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+		// silently keep default when missing
+	}
 }
 #define Load(t, j) if (IsType(t)) LoadMain<t>(pBase, j);
 
@@ -435,6 +442,9 @@ bool CConfigs::LoadConfig(const std::string& sConfigName, bool bNotify)
 {
 	try
 	{
+	// Only log missing vars when this load is explicitly notified
+	struct ScopedLogToggle { ScopedLogToggle(bool v) { s_LogMissingVars = v; } ~ScopedLogToggle() { s_LogMissingVars = false; } } _toggle(bNotify);
+
 		if (!std::filesystem::exists(m_sConfigPath + sConfigName + m_sConfigExtension))
 		{
 			if (sConfigName == std::string("default"))

@@ -139,7 +139,7 @@ bool CBacktrack::GetRecords(CBaseEntity* pEntity, std::vector<TickRecord*>& vRet
 	return true;
 }
 
-std::vector<TickRecord*> CBacktrack::GetValidRecords(std::vector<TickRecord*>& vRecords, CTFPlayer* pLocal, bool bDistance, float flTimeMod)
+std::vector<TickRecord*> CBacktrack::GetValidRecords(std::vector<TickRecord*>& vRecords, CTFPlayer* pLocal, bool bDistance, float flTimeMod, bool bAllowFuture, float flFutureTolerance)
 {
 	if (vRecords.empty())
 		return {};
@@ -149,53 +149,77 @@ std::vector<TickRecord*> CBacktrack::GetValidRecords(std::vector<TickRecord*>& v
 		return {};
 
 	std::vector<TickRecord*> vReturn = {};
+
+	// networking corrected latency (what server "currently" sees our cmd stream at)
 	float flCorrect = std::clamp(GetReal(MAX_FLOWS, false) + ROUND_TO_TICKS(GetFakeInterp()), 0.f, m_flMaxUnlag);
 	int iServerTick = m_iTickCount + GetAnticipatedChoke() + Vars::Backtrack::Offset.Value + TIME_TO_TICKS(GetReal(FLOW_OUTGOING));
 
-	if (!Vars::Misc::Game::AntiCheatCompatibility.Value && GetWindow())
+	const float flWindow = (!Vars::Misc::Game::AntiCheatCompatibility.Value) ? GetWindow() : 0.f;
+	const float flFutureMax = bAllowFuture ? std::max(flFutureTolerance, 0.f) : 0.f;
+
+	TickRecord* pBestFallback = nullptr; float flBestFallbackDelta = 0.2f; // legacy fallback range
+
+	for (auto pRecord : vRecords)
 	{
-		for (auto pRecord : vRecords)
-		{
-			float flDelta = fabsf(flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(pRecord->m_flSimTime + flTimeMod)));
-			if (flDelta > GetWindow())
-				continue;
+		// sim time including external modifier (used by melee swing sim to offset predicted path relative to chosen record list)
+		float flRecordTime = pRecord->m_flSimTime + flTimeMod;
+		float flDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(flRecordTime));
 
-			vReturn.push_back(pRecord);
+		// distinguish past vs future, negative delta => past relative to corrected time domain
+		float flAbsDelta = fabsf(flDelta);
+
+		bool bFuture = flDelta < 0.f; // negative because we subtract record time from server tick domain
+		if (bFuture) flAbsDelta = -flDelta; // |delta|
+
+		// allow predicted (future) records only if flagged and within tolerance
+		if (pRecord->m_bPredicted && bAllowFuture)
+		{
+			if (flAbsDelta <= flFutureMax)
+				vReturn.push_back(pRecord);
+			continue; // dont evaluate further window constraints
+		}
+
+		// Regular historical record window filter
+		if (flWindow > 0.f)
+		{
+			if (flAbsDelta <= flWindow)
+				vReturn.push_back(pRecord);
+		}
+
+		// Track best fallback if none inside window
+		if (!vReturn.size() && flAbsDelta < flBestFallbackDelta)
+		{
+			flBestFallbackDelta = flAbsDelta;
+			pBestFallback = pRecord;
 		}
 	}
 
-	if (vReturn.empty())
-	{	// make sure there is at least 1 record
-		float flMinDelta = 0.2f;
-		for (auto pRecord : vRecords)
-		{
-			float flDelta = fabsf(flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(pRecord->m_flSimTime + flTimeMod)));
-			if (flDelta > flMinDelta)
-				continue;
+	if (vReturn.empty() && pBestFallback)
+		vReturn = { pBestFallback };
 
-			flMinDelta = flDelta;
-			vReturn = { pRecord };
-		}
-	}
-	else if (pLocal && vReturn.size() > 1)
+	if (pLocal && vReturn.size() > 1)
 	{
 		if (bDistance)
+		{
 			std::sort(vReturn.begin(), vReturn.end(), [&](const TickRecord* a, const TickRecord* b) -> bool
 				{
 					if (Vars::Backtrack::PreferOnShot.Value && a->m_bOnShot != b->m_bOnShot)
 						return a->m_bOnShot > b->m_bOnShot;
-
 					return pLocal->m_vecOrigin().DistTo(a->m_vOrigin) < pLocal->m_vecOrigin().DistTo(b->m_vOrigin);
 				});
+		}
 		else
 		{
 			std::sort(vReturn.begin(), vReturn.end(), [&](const TickRecord* a, const TickRecord* b) -> bool
 				{
 					if (Vars::Backtrack::PreferOnShot.Value && a->m_bOnShot != b->m_bOnShot)
 						return a->m_bOnShot > b->m_bOnShot;
+					// prioritize predicted records first when allowed (gives melee swing preference)
+					if (a->m_bPredicted != b->m_bPredicted)
+						return a->m_bPredicted > b->m_bPredicted;
 
-					const float flADelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(a->m_flSimTime + flTimeMod));
-					const float flBDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(b->m_flSimTime + flTimeMod));
+					float flADelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(a->m_flSimTime + flTimeMod));
+					float flBDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(b->m_flSimTime + flTimeMod));
 					return fabsf(flADelta) < fabsf(flBDelta);
 				});
 		}

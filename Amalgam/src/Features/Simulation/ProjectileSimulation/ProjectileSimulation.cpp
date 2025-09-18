@@ -106,7 +106,9 @@ bool CProjectileSimulation::GetInfoMain(CTFPlayer* pPlayer, CTFWeaponBase* pWeap
 		float flMortar = bCannon ? SDK::AttribHookValue(0.f, "grenade_launcher_mortar_mode", pWeapon) : 0.f;
 
 		SDK::GetProjectileFireSetup(pPlayer, vAngles, { 16.f, 8.f, -6.f }, vPos, vAngle, true, bQuick);
-		float flSpeed = pPlayer->InCond(TF_COND_RUNE_PRECISION) ? 3000.f : SDK::AttribHookValue(1200.f, "mult_projectile_speed", pWeapon);
+		float flSpeed = pPlayer->InCond(TF_COND_RUNE_PRECISION)
+			? 3000.f
+			: SDK::AttribHookValue(bCannon ? 1454.f : 1200.f, "mult_projectile_speed", pWeapon);
 		float flLifetime = flMortar
 			? pWeapon->As<CTFGrenadeLauncher>()->m_flDetonateTime() > 0.f ? pWeapon->As<CTFGrenadeLauncher>()->m_flDetonateTime() - I::GlobalVars->curtime : flMortar
 			: SDK::AttribHookValue(2.f, "fuse_mult", pWeapon);

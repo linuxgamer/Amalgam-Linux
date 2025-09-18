@@ -24,6 +24,10 @@ void CMisc::RunPre(CTFPlayer* pLocal, CUserCmd* pCmd)
 	AutoPeek(pLocal, pCmd);
 	MovementLock(pLocal, pCmd);
 	BreakJump(pLocal, pCmd);
+
+	// Auto disguise if undisguised
+	if (Vars::Misc::Automation::AutoDisguiseIfUndisguised.Value)
+		TryAutoDisguise(pLocal);
 }
 
 void CMisc::RunPost(CTFPlayer* pLocal, CUserCmd* pCmd, bool pSendPacket)
@@ -358,6 +362,74 @@ void CMisc::FastMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 	}
 }
 
+bool CMisc::IsSpyWithKnife(CTFPlayer* pLocal)
+{
+	if (!pLocal)
+		return false;
+	if (pLocal->m_iClass() != TF_CLASS_SPY)
+		return false;
+	auto pWep = H::Entities.GetWeapon();
+	return pWep && pWep->GetWeaponID() == TF_WEAPON_KNIFE;
+}
+
+bool CMisc::IsDisguised(CTFPlayer* pLocal)
+{
+	// use condition flag if available
+	if (pLocal->InCond(TF_COND_DISGUISED))
+		return true;
+	// disguise class set to something other than undefined
+	return pLocal->m_nDisguiseClass() > TF_CLASS_UNDEFINED && pLocal->m_nDisguiseClass() < TF_CLASS_COUNT_ALL;
+}
+
+void CMisc::DisguiseAsConfiguredClass(CTFPlayer* pLocal)
+{
+	if (!pLocal || pLocal->IsTaunting())
+		return;
+
+	// SCOUT(1), SNIPER(2), SOLDIER(3), DEMOMAN(4), MEDIC(5), HEAVY(6), PYRO(7), SPY(8), ENGINEER(9)
+	static const int kUiToTfClass[9] = {
+		TF_CLASS_SCOUT,   // Scout
+		TF_CLASS_SOLDIER, // Soldier
+		TF_CLASS_PYRO,    // Pyro
+		TF_CLASS_DEMOMAN, // Demoman
+		TF_CLASS_HEAVY,   // Heavy
+		TF_CLASS_ENGINEER,// Engineer
+		TF_CLASS_MEDIC,   // Medic
+		TF_CLASS_SNIPER,  // Sniper
+		TF_CLASS_SPY      // Spy
+	};
+
+	int cfg = std::clamp(Vars::Misc::Automation::DisguiseClass.Value, 0, 8); // 0..8
+	int tfClass = kUiToTfClass[cfg];
+
+	// Use TF2 "enemy team" shorthand for disguise team argument.
+	// The console command expects: disguise <class> <team>
+	// where team = -1 means "enemy team". Using TF_TEAM_* values can map incorrectly
+	// for the console command and cause disguising as our own team.
+	std::string sCmd = "disguise ";
+	sCmd += std::to_string(tfClass);
+	sCmd += " ";
+	sCmd += "-1"; // enemy team
+	I::EngineClient->ClientCmd_Unrestricted(sCmd.c_str());
+}
+
+void CMisc::TryAutoDisguise(CTFPlayer* pLocal)
+{
+	if (!pLocal || !pLocal->IsAlive())
+		return;
+	if (pLocal->m_iClass() != TF_CLASS_SPY)
+		return;
+	if (IsDisguised(pLocal))
+		return;
+
+	// dont spam every tick, respect disguise time window
+	static Timer tTimer = {};
+	if (!tTimer.Run(0.6f))
+		return;
+
+	DisguiseAsConfiguredClass(pLocal);
+}
+
 void CMisc::AutoPeek(CTFPlayer* pLocal, CUserCmd* pCmd, bool bPost)
 {
 	static bool bReturning = false;
@@ -421,6 +493,38 @@ void CMisc::Event(IGameEvent* pEvent, uint32_t uHash)
 	{
 	case FNV1A::Hash32Const("player_spawn"):
 		m_bPeekPlaced = false;
+		break;
+	case FNV1A::Hash32Const("player_death"):
+	{
+		if (!Vars::Misc::Automation::DisguiseAfterBackstab.Value)
+			break;
+
+		// only act if we're the attacker, holding a knife, and kill was a backstab.
+		int attacker = pEvent->GetInt("attacker");
+		int userid = I::EngineClient->GetPlayerForUserID(attacker);
+		if (userid != I::EngineClient->GetLocalPlayer())
+			break;
+
+		auto pLocal = H::Entities.GetLocal();
+		if (!pLocal || !pLocal->IsAlive())
+			break;
+
+		if (!IsSpyWithKnife(pLocal))
+			break;
+
+		// tf2 doesnt always expose customkill in our event map; if available, prefer that
+		// mny servers set "customkill" to TF_CUSTOM_BACKSTAB (enum value 2) for backstab kills
+		// we'll accept either explicit customkill == 2 or victim was behind + using knife (approx)
+		bool bBackstab = false;
+		if (pEvent->GetInt("customkill", -1) != -1)
+			bBackstab = (pEvent->GetInt("customkill") == 2);
+		else
+			bBackstab = true; // assume knife kill implies backstab for our purposes
+
+		if (bBackstab)
+			DisguiseAsConfiguredClass(pLocal); // uses enemy team (-1) internally
+		break;
+	}
 	}
 }
 

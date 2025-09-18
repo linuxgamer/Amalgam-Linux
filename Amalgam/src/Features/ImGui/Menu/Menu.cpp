@@ -201,6 +201,15 @@ void CMenu::MenuAimbot(int iTab)
 					FDropdown(Vars::Aimbot::Healing::HealPriority);
 					FToggle(Vars::Aimbot::Healing::AutoHeal, FToggleEnum::Left);
 					FToggle(Vars::Aimbot::Healing::AutoArrow, FToggleEnum::Right);
+					if (Vars::Debug::Options.Value)
+					{
+						FSlider(Vars::Aimbot::Healing::AutoArrowHealthThreshold);
+						FSlider(Vars::Aimbot::Healing::AutoArrowCooldown);
+						FSlider(Vars::Aimbot::Healing::AutoArrowCriticalThreshold);
+						FToggle(Vars::Aimbot::Healing::AutoArrowForceOnCritical, FToggleEnum::Left);
+						FToggle(Vars::Aimbot::Healing::AutoArrowAnticipateDamage, FToggleEnum::Right);
+						FSlider(Vars::Aimbot::Healing::AutoArrowDangerThreshold);
+					}
 					FToggle(Vars::Aimbot::Healing::AutoRepair, FToggleEnum::Left);
 					FToggle(Vars::Aimbot::Healing::AutoSandvich, FToggleEnum::Right);
 					FToggle(Vars::Aimbot::Healing::AutoVaccinator, FToggleEnum::Left);
@@ -249,9 +258,13 @@ void CMenu::MenuAimbot(int iTab)
 					FDropdown(Vars::Aimbot::Projectile::Hitboxes, FDropdownEnum::Left);
 					FDropdown(Vars::Aimbot::Projectile::Modifiers, FDropdownEnum::Right);
 					FSlider(Vars::Aimbot::Projectile::MaxSimulationTime, FSliderEnum::Left);
+					FToggle(Vars::Aimbot::Projectile::UseCurvatureFit, FToggleEnum::Right);
+					// FSlider(Vars::Aimbot::Projectile::AirForwardModelBlend, FSliderEnum::Left); // hidden 
+					// FSlider(Vars::Aimbot::Projectile::GroundTurnScaleK, FSliderEnum::Right); // hidden 
+					FToggle(Vars::Aimbot::Projectile::UseStabilityMinSamples, FToggleEnum::Left);
 					PushTransparent(!Vars::Aimbot::Projectile::StrafePrediction.Value);
 					{
-						FSlider(Vars::Aimbot::Projectile::HitChance, FSliderEnum::Right);
+					FSlider(Vars::Aimbot::Projectile::HitChance, FSliderEnum::Right, Vars::Aimbot::Projectile::HitChance.Value <= 0.f ? "Auto" : "%g%%");
 					}
 					PopTransparent();
 					FSlider(Vars::Aimbot::Projectile::AutodetRadius, FSliderEnum::Left);
@@ -259,6 +272,16 @@ void CMenu::MenuAimbot(int iTab)
 					PushTransparent(!Vars::Aimbot::Projectile::AutoRelease.Value);
 					{
 						FSlider(Vars::Aimbot::Projectile::AutoRelease);
+					}
+					PopTransparent();
+
+					FText("\nFeet targeting");
+					FSlider(Vars::Aimbot::Projectile::FeetZBoostPipes, FSliderEnum::Left);
+					FToggle(Vars::Aimbot::Projectile::FeetZBoostPipesDynamic, FToggleEnum::Right);
+					PushTransparent(!Vars::Aimbot::Projectile::FeetZBoostPipesDynamic.Value);
+					{
+						FSlider(Vars::Aimbot::Projectile::FeetZBoostPipesDynScale, FSliderEnum::Left);
+						FSlider(Vars::Aimbot::Projectile::FeetZBoostPipesDynMax, FSliderEnum::Right);
 					}
 					PopTransparent();
 				} EndSection();
@@ -312,7 +335,7 @@ void CMenu::MenuAimbot(int iTab)
 						FDropdown(Vars::Aimbot::Projectile::RocketSplashMode, FDropdownEnum::Right, 0, &Hovered); FTooltip("Special splash type for rockets, more expensive", Hovered);
 						FSlider(Vars::Aimbot::Projectile::DeltaCount, FSliderEnum::Left);
 						FDropdown(Vars::Aimbot::Projectile::DeltaMode, FDropdownEnum::Right);
-						FDropdown(Vars::Aimbot::Projectile::MovesimFrictionFlags);
+						// FDropdown(Vars::Aimbot::Projectile::MovesimFrictionFlags); // hidden
 					} EndSection();
 				}
 				if (Section("Melee", 8))
@@ -1017,7 +1040,10 @@ void CMenu::MenuMisc(int iTab)
 					FToggle(Vars::Misc::Automation::KartControl, FToggleEnum::Right);
 					FToggle(Vars::Misc::Automation::AutoF2Ignored, FToggleEnum::Left);
 					FToggle(Vars::Misc::Automation::AutoF1Priority, FToggleEnum::Right);
-					FToggle(Vars::Misc::Automation::AcceptItemDrops);
+					FToggle(Vars::Misc::Automation::DisguiseAfterBackstab, FToggleEnum::Left);
+					FToggle(Vars::Misc::Automation::AutoDisguiseIfUndisguised, FToggleEnum::Right);
+					FToggle(Vars::Misc::Automation::AcceptItemDrops, FToggleEnum::Left);
+					FDropdown(Vars::Misc::Automation::DisguiseClass, FDropdownEnum::Right);
 				} EndSection();
 				if (Section("Mann vs. Machine", 8))
 				{
@@ -1049,7 +1075,6 @@ void CMenu::MenuMisc(int iTab)
 					FToggle(Vars::Misc::Game::F2PChatBypass, FToggleEnum::Right);
 					FToggle(Vars::Misc::Game::NetworkFix, FToggleEnum::Left);
 					FToggle(Vars::Misc::Game::SetupBonesOptimization, FToggleEnum::Right);
-					FToggle(Vars::Misc::Game::VACBypass, FToggleEnum::Left);
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{
