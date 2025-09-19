@@ -29,6 +29,8 @@ private:
 
 	std::unordered_map<int, std::deque<TickRecord>> m_mRecordMap;
 	std::unordered_map<int, std::vector<Vec3>> m_mPaths;
+    // For each predicted future record, store the local eye position at that exact simulated time
+    std::unordered_map<const TickRecord*, Vec3> m_mLocalEyeAtRecord;
 
 public:
 	void Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);

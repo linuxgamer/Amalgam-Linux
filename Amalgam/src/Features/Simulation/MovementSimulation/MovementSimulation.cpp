@@ -49,48 +49,10 @@ int CMovementSimulation::ComputeStabilityScore(const std::deque<MoveData>& recs,
 	}
 
 	float mean = std::accumulate(speeds.begin(), speeds.end(), 0.f) / speeds.size();
-	float var = 0.f; for (float s : speeds) { float d = s - mean; var += d * d; }
-	var /= std::max<size_t>(1, speeds.size());
-	int score = (int)std::round(jerkSum * 0.25f + var * 0.002f);
-	return std::max(0, score);
-}
-
-float CMovementSimulation::PredictAirYawPerTick(const PlayerStorage& tStorage, float avgYaw) const
-{
-	const auto& md = tStorage.m_MoveData;
-	// read convars
-	static auto sv_airaccelerate = U::ConVars.FindVar("sv_airaccelerate");
-	const float airaccel = std::max(sv_airaccelerate ? sv_airaccelerate->GetFloat() : 10.f, 1.f);
-	const float dt = TICK_INTERVAL;
-	const float maxspeed = std::max(md.m_flMaxSpeed, 1.f);
-
-	// wishdir: orthogonal steer relative to avgYaw sign
-	float viewYaw = md.m_vecViewAngles.y;
-	float steerYaw = viewYaw + (avgYaw >= 0.f ? 90.f : -90.f);
-	Vec3 wishdir{}; Math::AngleVectors({0.f, steerYaw, 0.f}, &wishdir);
-	wishdir.z = 0.f; wishdir = wishdir.Normalized();
-
-	Vec3 vel = md.m_vecVelocity; vel.z = 0.f; float speed = vel.Length();
-	if (speed < 1.f) return 0.f;
-
-	float proj = vel.Dot(wishdir);
-	float add = airaccel * maxspeed * dt;
-	if (proj + add > maxspeed)
-		add = std::max(0.f, maxspeed - proj);
-	Vec3 newVel = vel + wishdir * add;
-	float yawOld = Math::VectorAngles(vel).y;
-	float yawNew = Math::VectorAngles(newVel).y;
-	float yawDelta = Math::NormalizeAngle(yawNew - yawOld);
-	return std::clamp(yawDelta, -6.f, 6.f);
-}
-
-float CMovementSimulation::GetGroundTurnScale(const PlayerStorage& tStorage, float avgYaw) const
-{
-	const float k = Vars::Aimbot::Projectile::GroundTurnScaleK.Value;
-	if (k <= 0.f) return 1.f;
-	float v = tStorage.m_MoveData.m_vecVelocity.Length2D();
-	float scale = 1.f / (1.f + k * v * v);
-	return std::clamp(scale, 0.25f, 1.f);
+	    float var = 0.f; for (float s : speeds) { float d = s - mean; var += d * d; }
+    var /= std::max<size_t>(1, speeds.size());
+    int score = (int)std::round(jerkSum * 0.25f + var * 0.002f);
+    return std::max(0, score);
 }
 
 // kasa fit
@@ -553,22 +515,6 @@ static inline float GetGravity()
 	return sv_gravity->GetFloat();
 }
 
-static inline float GetFrictionScale(float flVelocityXY, float flTurn, float flVelocityZ, float flMin = 50.f, float flMax = 150.f)
-{
-	if (0.f >= flVelocityZ || flVelocityZ > 250.f)
-		return 1.f;
-
-	static auto sv_airaccelerate = U::ConVars.FindVar("sv_airaccelerate");
-	float flScale = std::max(sv_airaccelerate->GetFloat(), 1.f);
-	flMin *= flScale, flMax *= flScale;
-
-	// entity friction will be 0.25f if velocity is between 0.f and 250.f
-	return Math::RemapVal(fabsf(flVelocityXY * flTurn), flMin, flMax, 1.f, 0.25f);
-}
-
-// legacy GetYawDifference & visualization removed
-
-
 bool CMovementSimulation::StrafePrediction(PlayerStorage& tStorage, int iSamples)
 {
 	if (tStorage.m_bDirectMove
@@ -664,20 +610,19 @@ void CMovementSimulation::RunTick(PlayerStorage& tStorage, bool bPath, std::func
 	I::GlobalVars->frametime = I::Prediction->m_bEnginePaused ? 0.f : TICK_INTERVAL;
 	SetBounds(tStorage.m_pPlayer);
 
-	float flCorrection = 0.f;
-	if (tStorage.m_flAverageYaw)
-	{
-		if (!tStorage.m_bDirectMove && !tStorage.m_pPlayer->InCond(TF_COND_SHIELD_CHARGE))
-		{
-			// apply raw measured yaw per tick for air strafing
-			tStorage.m_MoveData.m_vecViewAngles.y += tStorage.m_flAverageYaw;
-		}
-		else
-		{
-			// apply raw measured yaw per tick for ground strafing
-			tStorage.m_MoveData.m_vecViewAngles.y += tStorage.m_flAverageYaw;
-		}
-	}
+	    if (tStorage.m_flAverageYaw)
+    {
+        if (!tStorage.m_bDirectMove && !tStorage.m_pPlayer->InCond(TF_COND_SHIELD_CHARGE))
+        {
+            // apply raw measured yaw per tick for air strafing
+            tStorage.m_MoveData.m_vecViewAngles.y += tStorage.m_flAverageYaw;
+        }
+        else
+        {
+            // apply raw measured yaw per tick for ground strafing
+            tStorage.m_MoveData.m_vecViewAngles.y += tStorage.m_flAverageYaw;
+        }
+    }
 	else if (!tStorage.m_bDirectMove)
 		tStorage.m_MoveData.m_flForwardMove = tStorage.m_MoveData.m_flSideMove = 0.f;
 
@@ -702,24 +647,24 @@ void CMovementSimulation::RunTick(PlayerStorage& tStorage, bool bPath, std::func
 	if (tStorage.m_bPredictNetworked)
 	{
 		tStorage.m_vPredictedOrigin = tStorage.m_MoveData.m_vecAbsOrigin;
-		tStorage.m_flPredictedSimTime += tStorage.m_flPredictedDelta;
-	}
-	bool bLastbDirectMove = tStorage.m_bDirectMove;
-	tStorage.m_bDirectMove = tStorage.m_pPlayer->IsOnGround() || tStorage.m_pPlayer->IsSwimming();
+		    tStorage.m_flPredictedSimTime += tStorage.m_flPredictedDelta;
+    }
+    bool bLastbDirectMove = tStorage.m_bDirectMove;
+    tStorage.m_bDirectMove = tStorage.m_pPlayer->IsOnGround() || tStorage.m_pPlayer->IsSwimming();
 
-	if (tStorage.m_flAverageYaw)
-		tStorage.m_MoveData.m_vecViewAngles.y -= flCorrection;
-	else if (tStorage.m_bDirectMove && !bLastbDirectMove
-		&& !tStorage.m_MoveData.m_flForwardMove && !tStorage.m_MoveData.m_flSideMove
-		&& tStorage.m_MoveData.m_vecVelocity.Length2D() > tStorage.m_MoveData.m_flMaxSpeed * 0.015f)
-	{
-		Vec3 vDirection = tStorage.m_MoveData.m_vecVelocity.Normalized2D() * 450.f;
-		s_tDummyCmd.forwardmove = vDirection.x, s_tDummyCmd.sidemove = -vDirection.y;
-		SDK::FixMovement(&s_tDummyCmd, {}, tStorage.m_MoveData.m_vecViewAngles);
-		tStorage.m_MoveData.m_flForwardMove = s_tDummyCmd.forwardmove, tStorage.m_MoveData.m_flSideMove = s_tDummyCmd.sidemove;
-	}
+    // if we just landed on ground with no input, align movement with velocity to preserve trajectory
+    if (!tStorage.m_flAverageYaw
+        && tStorage.m_bDirectMove && !bLastbDirectMove
+        && !tStorage.m_MoveData.m_flForwardMove && !tStorage.m_MoveData.m_flSideMove
+        && tStorage.m_MoveData.m_vecVelocity.Length2D() > tStorage.m_MoveData.m_flMaxSpeed * 0.015f)
+    {
+        Vec3 vDirection = tStorage.m_MoveData.m_vecVelocity.Normalized2D() * 450.f;
+        s_tDummyCmd.forwardmove = vDirection.x, s_tDummyCmd.sidemove = -vDirection.y;
+        SDK::FixMovement(&s_tDummyCmd, {}, tStorage.m_MoveData.m_vecViewAngles);
+        tStorage.m_MoveData.m_flForwardMove = s_tDummyCmd.forwardmove, tStorage.m_MoveData.m_flSideMove = s_tDummyCmd.sidemove;
+    }
 
-	RestoreBounds(tStorage.m_pPlayer);
+    RestoreBounds(tStorage.m_pPlayer);
 }
 
 void CMovementSimulation::RunTick(PlayerStorage& tStorage, bool bPath, std::function<void(CMoveData&)> fCallback)
@@ -750,35 +695,11 @@ void CMovementSimulation::Restore(PlayerStorage& tStorage)
 
 float CMovementSimulation::GetPredictedDelta(CBaseEntity* pEntity)
 {
-	auto& vSimTimes = m_mSimTimes[pEntity->entindex()];
-	// use latest observed network delta
-	float raw = vSimTimes.empty() ? TICK_INTERVAL : vSimTimes.front();
-	return std::clamp(raw, TICK_INTERVAL, 0.25f);
-}
-
-float CMovementSimulation::SmoothDelta(float newDelta)
-{
-	// exponential moving average smoothing for network delta prediction jitter reduction (long name = performance)
-	// alpha based on spec constant (0.35), could be tied to a cvar later
-	constexpr float kAlpha = 0.35f;
-	if (!m_bDeltaEMAInit)
-	{
-		m_flDeltaEMA = newDelta;
-		m_bDeltaEMAInit = true;
-	}
-	else
-	{
-		m_flDeltaEMA = kAlpha * newDelta + (1.f - kAlpha) * m_flDeltaEMA;
-	}
-	// clamp to reasonable bounds at least one tick at most ~0.25s (15 ticks @66.67hz)
-	return std::clamp(m_flDeltaEMA, TICK_INTERVAL, 0.25f);
-}
-
-float CMovementSimulation::ClampFriction(float rawScale) const
-{
-	// provide bounded friction scale to avoid extreme corrections influencing yaw / movement prediction
-	// desirable range [0.25, 1.25], allow mild boosts above 1 for acceleration phases
-	return std::clamp(rawScale, 0.25f, 1.25f);
+    auto& vSimTimes = m_mSimTimes[pEntity->entindex()];
+    // use latest observed network delta
+    float raw = vSimTimes.empty() ? TICK_INTERVAL : vSimTimes.front();
+    // do not upper-clamp; honor actual observed delta (minimum one tick)
+    return std::max(raw, TICK_INTERVAL);
 }
 
 // store per-player state so we can non-destructively simulate and then restore

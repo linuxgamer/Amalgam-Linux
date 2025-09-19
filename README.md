@@ -1,5 +1,5 @@
-# Amalgam Kaizer
-
+# <div align="center">Amalgam Kaizer</div>
+# <div align="center">[![Discord](https://img.shields.io/discord/1227898008373297223?style=for-the-badge&color=blue&labelColor=grey&label=Discord&logo=discord)](https://discord.gg/pev7Yr27pN)</div>
 ## Update Changelog
 
 ### Recent Updates
@@ -29,11 +29,12 @@
 - **Kasa Fit**: Fixed match calcs
 - **MoveSim Data**: Removed smoothing/heuristics, now uses raw data for much more accurate simulation
 - **Loose Cannon**: Fixed gravity calculations
+- **Swing Prediction**: Fixed early swings
 
 **Known Issues**
 - **Performance**: FPS drops after extended play time (fix in progress)
 
 ### Completed Tasks
-- ~~Auto switch for autobow (rijin request)~~ **COMPLETED** (Sept 17)
+- ~~Auto switch for autobow **COMPLETED** (Sept 17)
 
 [VAC bypass](https://github.com/danielkrupinski/VAC-Bypass-Loader) and [Xenos](https://github.com/DarthTon/Xenos/releases) recommended. 

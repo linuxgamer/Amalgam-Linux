@@ -25,14 +25,12 @@ bool YawAccumulator::Step(MoveData& newer, MoveData& older)
     const int   ticks  = std::max(TIME_TO_TICKS(newer.m_flSimTime - older.m_flSimTime), 1);
 
     float yawDelta = Math::NormalizeAngle(yawNew - yawOld);
-    // clamp extreme spikes but keep the sample instead of aborting
-    if (fabsf(yawDelta) > 45.f)
-        yawDelta = std::clamp(yawDelta, -45.f, 45.f);
 
     const int signNow = yawDelta ? (yawDelta > 0.f ? 1 : -1) : m_lastSign;
     const bool isZero = yawDelta == 0.f;
 
-    // accumulate without gating to preserve raw strafe characteristics
+    // accumulate without gating or clamping to preserve raw strafe characteristics
+
     if (!m_started)
     {
         m_started = true;

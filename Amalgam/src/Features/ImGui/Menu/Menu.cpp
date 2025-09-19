@@ -258,10 +258,8 @@ void CMenu::MenuAimbot(int iTab)
 					FDropdown(Vars::Aimbot::Projectile::Hitboxes, FDropdownEnum::Left);
 					FDropdown(Vars::Aimbot::Projectile::Modifiers, FDropdownEnum::Right);
 					FSlider(Vars::Aimbot::Projectile::MaxSimulationTime, FSliderEnum::Left);
-					FToggle(Vars::Aimbot::Projectile::UseCurvatureFit, FToggleEnum::Right);
 					// FSlider(Vars::Aimbot::Projectile::AirForwardModelBlend, FSliderEnum::Left); // hidden 
 					// FSlider(Vars::Aimbot::Projectile::GroundTurnScaleK, FSliderEnum::Right); // hidden 
-					FToggle(Vars::Aimbot::Projectile::UseStabilityMinSamples, FToggleEnum::Left);
 					PushTransparent(!Vars::Aimbot::Projectile::StrafePrediction.Value);
 					{
 					FSlider(Vars::Aimbot::Projectile::HitChance, FSliderEnum::Right, Vars::Aimbot::Projectile::HitChance.Value <= 0.f ? "Auto" : "%g%%");
@@ -289,6 +287,10 @@ void CMenu::MenuAimbot(int iTab)
 				{
 					if (Section("##Debug Projectile"))
 					{
+						// General debug-only toggles
+						FToggle(Vars::Aimbot::Projectile::UseCurvatureFit, FToggleEnum::Left);
+						FToggle(Vars::Aimbot::Projectile::UseStabilityMinSamples, FToggleEnum::Right);
+
 						FText("Ground");
 						FSlider(Vars::Aimbot::Projectile::GroundSamples, FSliderEnum::Left);
 						FSlider(Vars::Aimbot::Projectile::GroundStraightFuzzyValue, FSliderEnum::Right);
@@ -1073,9 +1075,9 @@ void CMenu::MenuMisc(int iTab)
 				{
 					FToggle(Vars::Misc::Game::AntiCheatCompatibility, FToggleEnum::Left);
 					FToggle(Vars::Misc::Game::F2PChatBypass, FToggleEnum::Right);
+					FToggle(Vars::Misc::Game::VACBypass, FToggleEnum::Left);
 					FToggle(Vars::Misc::Game::NetworkFix, FToggleEnum::Left);
 					FToggle(Vars::Misc::Game::SetupBonesOptimization, FToggleEnum::Right);
-					FToggle(Vars::Misc::Game::VACBypass, FToggleEnum::Left);
 				} EndSection();
 				if (Vars::Debug::Options.Value)
 				{

@@ -128,6 +128,7 @@ int CAimbotMelee::GetSwingTime(CTFWeaponBase* pWeapon, bool bVar)
 void CAimbotMelee::UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, std::vector<Target_t> vTargets)
 {
 	m_mRecordMap.clear(); m_mPaths.clear();
+    m_mLocalEyeAtRecord.clear();
 	m_iDoubletapTicks = F::Ticks.GetTicks(pWeapon);
 	m_vEyePos = pLocal->GetShootPos();
 	m_flRange = pWeapon->GetSwingRange();
@@ -144,6 +145,7 @@ void CAimbotMelee::UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCm
 
 		int iMax = std::max(iSimTicks, m_iDoubletapTicks);
 		int iLocal = iMax; bool bSwung = false;
+		Vec3 vLocalEyeForTick = {};
 		for (int i = 0; i < iLocal; i++) // intended for plocal to collide with targets
 		{
 			{
@@ -165,6 +167,8 @@ void CAimbotMelee::UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCm
 				if (m_iDoubletapTicks && Vars::Doubletap::AntiWarp.Value && pLocal->m_hGroundEntity())
 					F::Ticks.AntiWarp(pLocal, pCmd->viewangles.y, tStorage.m_MoveData.m_flForwardMove, tStorage.m_MoveData.m_flSideMove, iMax - i - 1);
 				F::MoveSim.RunTick(tStorage);
+				// record the local eye position for this simulation tick
+				vLocalEyeForTick = tStorage.m_MoveData.m_vecAbsOrigin + pLocal->m_vecViewOffset();
 			}
 
 			if (i < iSimTicks - m_iDoubletapTicks)
@@ -176,11 +180,14 @@ void CAimbotMelee::UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCm
 						continue;
 
 					F::MoveSim.RunTick(tStorage);
-					m_mRecordMap[tTarget.m_pEntity->entindex()].emplace_front(
+					auto& deq = m_mRecordMap[tTarget.m_pEntity->entindex()];
+					deq.emplace_front(
 						!Vars::Aimbot::Melee::SwingPredictLag.Value || tStorage.m_bPredictNetworked ? tTarget.m_pEntity->m_flSimulationTime() + TICKS_TO_TIME(i + 1) : 0.f,
 						Vars::Aimbot::Melee::SwingPredictLag.Value ? tStorage.m_vPredictedOrigin : tStorage.m_MoveData.m_vecAbsOrigin,
 						tTarget.m_pEntity->m_vecMins(), tTarget.m_pEntity->m_vecMaxs()
 					);
+					// remember what our local eye position will be at the time of this predicted record
+					m_mLocalEyeAtRecord[&deq.front()] = vLocalEyeForTick;
 				}
 			}
 		}
@@ -323,9 +330,9 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 				tRecord.m_bPredicted = true;
 				vRecords.push_back(&tRecord);
 			}
-			// allow up to melee swing time into future (range based on sim records count)
-			float flFutureTol = TICKS_TO_TIME(std::min<int>(vSimRecords.size(), 16));
-			vRecords = F::Backtrack.GetValidRecords(vRecords, pLocal, true, 0.f, true, flFutureTol);
+			// allow up to melee swing time into future (range based on sim records count and weapon smack delay)
+            float flFutureTol = TICKS_TO_TIME(std::min<int>(static_cast<int>(vSimRecords.size()), GetSwingTime(pWeapon)));
+            vRecords = F::Backtrack.GetValidRecords(vRecords, pLocal, true, 0.f, true, flFutureTol);
 		}
 		if (vRecords.empty())
 			return false;
@@ -352,18 +359,22 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 		tTarget.m_pEntity->m_vecMins() = pRecord->m_vMins + 0.125f; // account for origin compression
 		tTarget.m_pEntity->m_vecMaxs() = pRecord->m_vMaxs - 0.125f;
 
-		Vec3 vDiff = { 0, 0, std::clamp(m_vEyePos.z - pRecord->m_vOrigin.z, tTarget.m_pEntity->m_vecMins().z, tTarget.m_pEntity->m_vecMaxs().z) };
+		Vec3 vEyeThisRecord = m_vEyePos;
+		if (auto it = m_mLocalEyeAtRecord.find(pRecord); it != m_mLocalEyeAtRecord.end())
+			vEyeThisRecord = it->second;
+
+		Vec3 vDiff = { 0, 0, std::clamp(vEyeThisRecord.z - pRecord->m_vOrigin.z, tTarget.m_pEntity->m_vecMins().z, tTarget.m_pEntity->m_vecMaxs().z) };
 		tTarget.m_vPos = pRecord->m_vOrigin + vDiff;
-		Aim(G::CurrentUserCmd->viewangles, Math::CalcAngle(m_vEyePos, tTarget.m_vPos), tTarget.m_vAngleTo);
+		tTarget.m_vAngleTo = Math::CalcAngle(vEyeThisRecord, tTarget.m_vPos);
 
 		Vec3 vForward; Math::AngleVectors(tTarget.m_vAngleTo, &vForward);
-		Vec3 vTraceEnd = m_vEyePos + (vForward * flRange);
+		Vec3 vTraceEnd = vEyeThisRecord + (vForward * flRange);
 
-		SDK::TraceHull(m_vEyePos, vTraceEnd, {}, {}, MASK_SOLID, &filter, &trace);
+		SDK::TraceHull(vEyeThisRecord, vTraceEnd, {}, {}, MASK_SOLID, &filter, &trace);
 		bool bReturn = trace.m_pEnt && trace.m_pEnt == tTarget.m_pEntity;
 		if (!bReturn)
 		{
-			SDK::TraceHull(m_vEyePos, vTraceEnd, vSwingMins, vSwingMaxs, MASK_SOLID, &filter, &trace);
+			SDK::TraceHull(vEyeThisRecord, vTraceEnd, vSwingMins, vSwingMaxs, MASK_SOLID, &filter, &trace);
 			bReturn = trace.m_pEnt && trace.m_pEnt == tTarget.m_pEntity;
 		}
 
@@ -386,12 +397,12 @@ int CAimbotMelee::CanHit(Target_t& tTarget, CTFPlayer* pLocal, CTFWeaponBase* pW
 		case Vars::Aimbot::General::AimTypeEnum::Smooth:
 		case Vars::Aimbot::General::AimTypeEnum::Assistive:
 		{
-			auto vAngle = Math::CalcAngle(m_vEyePos, tTarget.m_vPos);
+			auto vAngle = Math::CalcAngle(vEyeThisRecord, tTarget.m_vPos);
 
 			Vec3 vForward = Vec3(); Math::AngleVectors(vAngle, &vForward);
-			Vec3 vTraceEnd = m_vEyePos + (vForward * flRange);
+			Vec3 vTraceEnd = vEyeThisRecord + (vForward * flRange);
 
-			SDK::Trace(m_vEyePos, vTraceEnd, MASK_SHOT | CONTENTS_GRATE, &filter, &trace);
+			SDK::Trace(vEyeThisRecord, vTraceEnd, MASK_SHOT | CONTENTS_GRATE, &filter, &trace);
 			if (trace.m_pEnt && trace.m_pEnt == tTarget.m_pEntity)
 				return 2;
 		}
@@ -564,12 +575,12 @@ void CAimbotMelee::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd
 		G::AimPoint = { tTarget.m_vPos, I::GlobalVars->tickcount };
 
 		if (Vars::Aimbot::General::AutoShoot.Value && pWeapon->m_flSmackTime() < 0.f)
-		{
-			if (m_bShouldSwing)
-				pCmd->buttons |= IN_ATTACK;
-			if (m_iDoubletapTicks)
-				F::Ticks.m_bDoubletap = true;
-		}
+        {
+            // we have a predicted valid hit within the swing window -> start the swing now
+            pCmd->buttons |= IN_ATTACK;
+            if (m_iDoubletapTicks)
+                F::Ticks.m_bDoubletap = true;
+        }
 
 		G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
 		if (G::Attacking == 1)
