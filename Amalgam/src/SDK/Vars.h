@@ -760,6 +760,7 @@ NAMESPACE_BEGIN(Vars)
 			CVar(NetworkFix, "Network fix", false);
 			CVar(SetupBonesOptimization, "Bones optimization", false);
 			CVar(AntiCheatCompatibility, "Anti-cheat compatibility", false);
+			CVar(VACBypass, "Insecure dialog bypass", true);
 
 			CVar(AntiCheatCritHack, "Anti-cheat crit hack", false, NOSAVE | DEBUGVAR);
 		NAMESPACE_END(Game)
