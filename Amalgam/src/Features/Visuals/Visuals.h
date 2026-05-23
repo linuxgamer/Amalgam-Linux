@@ -44,6 +44,7 @@ private:
 	std::unordered_map<CBaseEntity*, Projectile_t> m_mProjectiles = {};
 	std::vector<Sightline_t> m_vSightLines = {};
 	std::vector<PickupData_t> m_vPickups = {};
+	std::vector<Vec3> m_vAngles = {};
 
 #ifdef DEBUG_TEXT
 	std::vector<DebugText_t> m_vDebugText = {};
@@ -56,7 +57,6 @@ public:
 
 	void ProjectileTrace(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, const bool bInterp = true);
 	void DrawPickupTimers();
-	void DrawAntiAim(CTFPlayer* pLocal);
 	void DrawDebugInfo(CTFPlayer* pLocal);
 
 #ifdef DEBUG_TEXT
@@ -79,6 +79,7 @@ public:
 	void RestoreWorldModulation();
 
 	void CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon);
+	void LocalAnimations(CTFPlayer* pLocal, CUserCmd* pCmd, bool bSendPacket);
 };
 
 ADD_FEATURE(CVisuals, Visuals);

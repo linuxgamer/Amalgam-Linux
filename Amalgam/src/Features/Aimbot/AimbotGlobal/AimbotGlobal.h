@@ -8,6 +8,7 @@ enum BOUNDS_HITBOXES
 };
 
 Enum(Target, Unknown, Player, Sentry, Dispenser, Teleporter, Sticky, NPC, Bomb)
+Enum(ShouldIgnore, None, Dormant = 1 << 0, Ignored = 1 << 1)
 
 struct Target_t
 {
@@ -32,12 +33,15 @@ public:
 	void SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod);
 	void SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod);
 
-	bool PlayerBoneInFOV(CTFPlayer* pTarget, Vec3 vLocalPos, Vec3 vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
+	float GetAimFOV();
+	bool EntityCenterInFOV(CBaseEntity* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo);
+	bool PlayerBoneInFOV(CTFPlayer* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
 	bool IsHitboxValid(CBaseEntity* pEntity, int nHitbox, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
 	bool IsHitboxValid(int nHitbox, int iHitboxes = Vars::Aimbot::Projectile::HitboxesEnum::Head | Vars::Aimbot::Projectile::HitboxesEnum::Body | Vars::Aimbot::Projectile::HitboxesEnum::Feet);
 	bool ShouldMultipoint(CBaseEntity* pEntity = nullptr, int nHitbox = -1, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
+	bool ShouldAimAtAngle(Vec3 vAngles);
 
-	bool ShouldIgnore(CBaseEntity* pTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon);
+	bool ShouldIgnore(CBaseEntity* pTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, int iFunctionFlags = ShouldIgnoreEnum::Dormant | ShouldIgnoreEnum::Ignored, int iTargetFlags = Vars::Aimbot::General::Target.Value, int iIgnoreFlags = Vars::Aimbot::General::Ignore.Value);
 	int GetPriority(int iIndex);
 	bool FriendlyFire();
 

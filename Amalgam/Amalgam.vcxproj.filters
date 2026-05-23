@@ -45,7 +45,7 @@
     <ClCompile Include="src\Features\Aimbot\AutoHeal\AutoHeal.cpp" />
     <ClCompile Include="src\Features\Misc\AutoQueue\AutoQueue.cpp" />
     <ClCompile Include="src\Features\Backtrack\Backtrack.cpp" />
-    <ClCompile Include="src\Features\CheaterDetection\CheaterDetection.cpp" />
+    <ClCompile Include="src\Features\CheatDetection\CheatDetection.cpp" />
     <ClCompile Include="src\Features\CritHack\CritHack.cpp" />
     <ClCompile Include="src\Features\EnginePrediction\EnginePrediction.cpp" />
     <ClCompile Include="src\Features\Misc\Misc.cpp" />
@@ -205,6 +205,9 @@
     <ClCompile Include="include\ImGui\imgui_tables.cpp" />
     <ClCompile Include="include\ImGui\imgui_widgets.cpp" />
     <ClCompile Include="include\ImGui\TextEditor.cpp" />
+    <ClCompile Include="src\Hooks\CTFPlayerShared_IsCritBoosted.cpp" />
+    <ClCompile Include="src\Hooks\CEngineClient_GetScreenAspectRatio.cpp" />
+    <ClCompile Include="src\Features\AntiCheatCompatibility\AntiCheatCompatibility.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Utils\UtlVector\UtlVector.h" />
@@ -391,7 +394,7 @@
     <ClInclude Include="src\Features\Aimbot\AutoHeal\AutoHeal.h" />
     <ClInclude Include="src\Features\Misc\AutoQueue\AutoQueue.h" />
     <ClInclude Include="src\Features\Backtrack\Backtrack.h" />
-    <ClInclude Include="src\Features\CheaterDetection\CheaterDetection.h" />
+    <ClInclude Include="src\Features\CheatDetection\CheatDetection.h" />
     <ClInclude Include="src\Features\CritHack\CritHack.h" />
     <ClInclude Include="src\Features\EnginePrediction\EnginePrediction.h" />
     <ClInclude Include="src\Features\Misc\Misc.h" />
@@ -620,6 +623,7 @@
     <ClInclude Include="src\SDK\Definitions\Misc\CUtlBlockMemory.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\CUtlLinkedList.h" />
     <ClInclude Include="src\SDK\Definitions\Misc\CUtlShared.h" />
+    <ClInclude Include="src\Features\AntiCheatCompatibility\AntiCheatCompatibility.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

@@ -10,11 +10,12 @@
 #include "../Misc/Misc.h"
 #include "../Visuals/Visuals.h"
 
-bool CAimbot::ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
+bool CAimbot::ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
 	if (!pWeapon || !pLocal->CanAttack()
 		|| !SDK::AttribHookValue(1, "mult_dmg", pWeapon)
-		|| I::EngineVGui->IsGameUIVisible())
+		|| I::EngineVGui->IsGameUIVisible()
+		|| pCmd->weaponselect)
 		return false;
 
 	return true;
@@ -54,11 +55,8 @@ void CAimbot::RunMain(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	if (abs(G::AimPoint.m_iTickCount - I::GlobalVars->tickcount) > G::AimPoint.m_iDuration)
 		G::AimPoint = {};
 
-	if (pCmd->weaponselect)
-		return;
-
 	F::AutoRocketJump.Run(pLocal, pWeapon, pCmd);
-	if (!ShouldRun(pLocal, pWeapon))
+	if (!ShouldRun(pLocal, pWeapon, pCmd))
 		return;
 
 	F::AutoDetonate.Run(pLocal, pCmd);
@@ -102,13 +100,16 @@ void CAimbot::Store(CBaseEntity* pEntity, size_t iSize)
 	if (!pEntity->IsPlayer())
 		return;
 
-	if (auto pResource = H::Entities.GetResource())
-	{
-		float flDuration = Vars::Visuals::Prediction::PlayerDrawDuration.Value ? Vars::Visuals::Prediction::PlayerDrawDuration.Value : 5.f;
-		m_tPath = { { pEntity->m_vecOrigin() }, I::GlobalVars->curtime + flDuration, Color_t(), Vars::Visuals::Prediction::RealPath.Value };
-		m_iSize = iSize;
-		m_iPlayer = pResource->m_iUserID(pEntity->entindex());
-	}
+	auto pResource = H::Entities.GetResource();
+	if (!pResource)
+		return;
+
+	int iUserID = pResource->m_iUserID(pEntity->entindex());
+	float flDuration = Vars::Visuals::Prediction::PlayerDrawDuration.Value ? Vars::Visuals::Prediction::PlayerDrawDuration.Value : 5.f;
+	m_mRealPaths[iUserID] = {
+		{ { pEntity->m_vecOrigin() }, I::GlobalVars->curtime + flDuration, Color_t(), Vars::Visuals::Prediction::RealPath.Value },
+		iSize
+	};
 }
 
 void CAimbot::Store(bool bFrameStageNotify)
@@ -124,26 +125,27 @@ void CAimbot::Store(bool bFrameStageNotify)
 		iStaticTickcout = I::GlobalVars->tickcount;
 	}
 
-	if (!m_tPath.m_flTime)
-		return;
-	else if (m_tPath.m_vPath.size() >= m_iSize || m_tPath.m_flTime < I::GlobalVars->curtime)
+	for (auto& [iUserID, tPath] : m_mRealPaths)
 	{
-		if (m_tPath.m_tColor = Vars::Colors::RealPath.Value, m_tPath.m_bZBuffer = true; m_tPath.m_tColor.a)
-			G::PathStorage.push_back(m_tPath);
-		if (m_tPath.m_tColor = Vars::Colors::RealPathIgnoreZ.Value, m_tPath.m_bZBuffer = false; m_tPath.m_tColor.a)
-			G::PathStorage.push_back(m_tPath);
-		m_tPath = {};
-		return;
+		if (tPath.m_tPath.m_vPath.size() >= tPath.m_iSize || tPath.m_tPath.m_flTime < I::GlobalVars->curtime)
+		{
+			if (tPath.m_tPath.m_tColor = Vars::Colors::RealPath.Value, tPath.m_tPath.m_bZBuffer = true; tPath.m_tPath.m_tColor.a)
+				G::PathStorage.push_back(tPath.m_tPath);
+			if (tPath.m_tPath.m_tColor = Vars::Colors::RealPathIgnoreZ.Value, tPath.m_tPath.m_bZBuffer = false; tPath.m_tPath.m_tColor.a)
+				G::PathStorage.push_back(tPath.m_tPath);
+			m_mRealPaths.erase(iUserID);
+			continue;
+		}
+
+		int iIndex = I::EngineClient->GetPlayerForUserID(iUserID);
+		if (bFrameStageNotify ? iIndex == I::EngineClient->GetLocalPlayer() : iIndex != I::EngineClient->GetLocalPlayer())
+			continue;
+
+		auto pPlayer = I::ClientEntityList->GetClientEntity(iIndex)->As<CTFPlayer>();
+		if (!pPlayer)
+			continue;
+
+		for (int i = 0; i < iLag; i++)
+			tPath.m_tPath.m_vPath.push_back(pPlayer->m_vecOrigin());
 	}
-
-	int iIndex = I::EngineClient->GetPlayerForUserID(m_iPlayer);
-	if (bFrameStageNotify ? iIndex == I::EngineClient->GetLocalPlayer() : iIndex != I::EngineClient->GetLocalPlayer())
-		return;
-
-	auto pPlayer = I::ClientEntityList->GetClientEntity(iIndex)->As<CTFPlayer>();
-	if (!pPlayer)
-		return;
-
-	for (int i = 0; i < iLag; i++)
-		m_tPath.m_vPath.push_back(pPlayer->m_vecOrigin());
 }

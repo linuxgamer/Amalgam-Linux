@@ -6,8 +6,8 @@
 Enum(Entity,
 	PlayerAll, PlayerEnemy, PlayerTeam,
 	BuildingAll, BuildingEnemy, BuildingTeam,
-	PickupHealth, PickupAmmo, PickupMoney, PickupPowerup, PickupSpellbook, PickupGargoyle,
-	WorldProjectile, WorldObjective, WorldNPC, WorldBomb,
+	/*PickupHealth, PickupAmmo, PickupMoney, PickupPowerup, PickupSpellbook, PickupGargoyle,*/
+	WorldProjectile,  WorldNPC, WorldBomb, /*WorldObjective,*/
 	LocalStickies, LocalFlares, SniperDots,
 	Invalid, GroupsMax
 )
@@ -35,14 +35,13 @@ private:
 
 	std::array<std::vector<CBaseEntity*>, EntityEnum::GroupsMax> m_aGroups = {};
 
-	std::array<float, MAX_PLAYERS> m_aDeltaTimes = {}, m_aLagTimes = {};
+	std::array<float, MAX_PLAYERS> m_aSimTimes = {}, m_aDeltaTimes = {}, m_aLagTimes = {};
 	std::array<int, MAX_PLAYERS> m_aChokes = {}, m_aSetTicks = {};
 	std::array<Vec3, MAX_PLAYERS> m_aOldAngles = {}, m_aEyeAngles = {};
 	std::array<bool, MAX_PLAYERS> m_aLagCompensation = {};
 	std::array<Vec3, MAX_PLAYERS> m_aAvgVelocities = {};
 	std::array<std::deque<VelFixRecord>, MAX_PLAYERS> m_aOrigins = {};
 	std::array<uint32_t, MAX_EDICTS> m_aModels = {};
-	std::array<bool, MAX_EDICTS> m_aDormancy = {};
 
 	std::unordered_map<int, int> m_mIPriorities = {};
 	std::unordered_map<uint32_t, int> m_mUPriorities = {};
@@ -71,20 +70,20 @@ public:
 	CTFWeaponBase* GetWeapon();
 	CTFPlayerResource* GetResource();
 
-	const std::vector<CBaseEntity*>& GetGroup(byte iGroup);
+	const std::vector<CBaseEntity*>& GetGroup(uint8_t iGroup);
 
-	float GetDeltaTime(byte iIndex);
-	float GetLagTime(byte iIndex);
-	int GetChoke(byte iIndex);
-	Vec3 GetEyeAngles(byte iIndex);
-	Vec3 GetDeltaAngles(byte iIndex);
-	bool GetLagCompensation(byte iIndex);
-	void SetLagCompensation(byte iIndex, bool bLagComp);
-	Vec3* GetAvgVelocity(byte iIndex);
-	void SetAvgVelocity(byte iIndex, Vec3 vAvgVelocity);
-	std::deque<VelFixRecord>* GetOrigins(byte iIndex);
+	float GetDeltaTime(uint16_t iIndex);
+	float GetLagTime(uint16_t iIndex);
+	int GetChoke(uint16_t iIndex);
+	Vec3 GetEyeAngles(uint16_t iIndex);
+	Vec3 GetDeltaAngles(uint16_t iIndex);
+	bool GetLagCompensation(uint16_t iIndex);
+	void SetLagCompensation(uint16_t iIndex, bool bLagComp);
+	Vec3* GetAvgVelocity(uint16_t iIndex);
+	void SetAvgVelocity(uint16_t iIndex, Vec3 vAvgVelocity);
+	std::deque<VelFixRecord>* GetOrigins(uint16_t iIndex);
 	uint32_t GetModel(unsigned short iIndex);
-	bool GetDormancy(unsigned short iIndex);
+	DormantData* GetDormancy(unsigned short iIndex);
 
 	int GetPriority(int iIndex);
 	int GetPriority(uint32_t uAccountID);
