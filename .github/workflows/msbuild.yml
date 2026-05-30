@@ -6,32 +6,14 @@ on:
 jobs:
   msbuild:
     runs-on: windows-latest
-
-    strategy:
-      matrix:
-        configuration: [Release, ReleaseAVX2, ReleaseFreetype, ReleaseFreetypeAVX2]
-        platform: [x64]
-
     steps:
     - uses: actions/checkout@v4
-
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Restore NuGet packages
-      working-directory: ${{ github.workspace }}
+    - uses: microsoft/setup-msbuild@v2
+    - name: Restore NuGet
       run: nuget restore
-
     - name: Build
-      working-directory: ${{ github.workspace }}
-      run: msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }}
-
+      run: msbuild Amalgam.sln /p:Platform=x64 /p:Configuration=ReleaseFreetypeAVX2
     - uses: actions/upload-artifact@v4
       with:
-        name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}
-        path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}PDB
-        path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
+        name: AmalgamDLL
+        path: output/x64/ReleaseFreetypeAVX2/*.dll
