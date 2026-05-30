@@ -52,7 +52,7 @@ MAKE_HOOK(VGuiSurface_LockCursor, U::Memory.GetVirtual(I::MatSystemSurface, 62),
 {
 	DEBUG_RETURN(VGuiSurface_LockCursor, rcx);
 
-	if (F::Menu.m_bIsOpen)
+	if (F::Menu.m_bIsOpen && I::MatSystemSurface)
 		return I::MatSystemSurface->UnlockCursor();
 
 	CALL_ORIGINAL(rcx);
@@ -63,19 +63,19 @@ MAKE_HOOK(VGuiSurface_SetCursor, U::Memory.GetVirtual(I::MatSystemSurface, 51), 
 {
 	DEBUG_RETURN(VGuiSurface_SetCursor, rcx, cursor);
 
-	if (F::Menu.m_bIsOpen)
+	if (F::Menu.m_bIsOpen && I::MatSystemSurface)
 	{
 		switch (F::Render.Cursor)
 		{
-		case 0: cursor = 2; break;
-		case 1: cursor = 3; break;
-		case 2: cursor = 12; break;
-		case 3: cursor = 11; break;
-		case 4: cursor = 10; break;
-		case 5: cursor = 9; break;
-		case 6: cursor = 8; break;
-		case 7: cursor = 14; break;
-		case 8: cursor = 13; break;
+			case 0: cursor = 2; break;
+			case 1: cursor = 3; break;
+			case 2: cursor = 12; break;
+			case 3: cursor = 11; break;
+			case 4: cursor = 10; break;
+			case 5: cursor = 9; break;
+			case 6: cursor = 8; break;
+			case 7: cursor = 14; break;
+			case 8: cursor = 13; break;
 		}
 	}
 
