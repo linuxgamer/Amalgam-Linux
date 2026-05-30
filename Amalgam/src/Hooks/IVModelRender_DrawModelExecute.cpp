@@ -19,9 +19,9 @@ MAKE_HOOK(IVModelRender_DrawModelExecute, U::Memory.GetVirtual(I::ModelRender, 1
 		return CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
 
 	if (F::Chams.m_bRendering)
-		return F::Chams.RenderHandler(pState, pInfo, pBoneToWorld);
+		return CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
 	if (F::Glow.m_bRendering)
-		return F::Glow.RenderHandler(pState, pInfo, pBoneToWorld);
+		return CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
 
 	if (F::Chams.m_mEntities.contains(pInfo.entity_index))
 		return;
