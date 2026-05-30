@@ -1,9 +1,7 @@
 name: MSBuild
 
 on:
-  push:
-  pull_request:
-  workflow_dispatch:  # allows manual run from Actions tab
+  workflow_dispatch:
 
 jobs:
   msbuild:
