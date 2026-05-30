@@ -12,7 +12,7 @@ MAKE_HOOK(IMaterialSystem_FindTexture, U::Memory.GetVirtual(I::MaterialSystem, 7
 	{
 		auto fOverrideTexture = [&]()
 		{
-			if (!pReturn || pReturn->IsTranslucent() || !pTextureName || !pTextureGroupName)
+			if (!I::MaterialSystem || !pReturn || pReturn->IsTranslucent() || !pTextureName || !pTextureGroupName)
 				return;
 
 			std::string_view sName = pTextureName;
@@ -22,7 +22,9 @@ MAKE_HOOK(IMaterialSystem_FindTexture, U::Memory.GetVirtual(I::MaterialSystem, 7
 
 			Vec3 vColor; pReturn->GetLowResColorSample(0.5f, 0.5f, &vColor.x);
 			Color_t tColor = { byte(vColor.x * 255), byte(vColor.y * 255), byte(vColor.z * 255), 255 };
-			pReturn = I::MaterialSystem->CreateTextureFromBits(1, 1, 1, IMAGE_FORMAT_RGBA8888, 4, &tColor.r);
+			auto pNewTexture = I::MaterialSystem->CreateTextureFromBits(1, 1, 1, IMAGE_FORMAT_RGBA8888, 4, &tColor.r);
+			if (pNewTexture)
+				pReturn = pNewTexture;
 		};
 		fOverrideTexture();
 	}
