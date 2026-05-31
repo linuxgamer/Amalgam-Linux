@@ -14,8 +14,11 @@ MAKE_HOOK(CViewRender_LevelInit, U::Memory.GetVirtual(I::ViewRender, 1), void,
 {
 	DEBUG_RETURN(CViewRender_LevelInit, rcx);
 
-	F::Materials.ReloadMaterials();
-	F::Visuals.OverrideWorldTextures();
+	if (I::MaterialSystem)
+	{
+		F::Materials.ReloadMaterials();
+		F::Visuals.OverrideWorldTextures();
+	}
 
 	F::Backtrack.Reset();
 	F::Ticks.Reset();
