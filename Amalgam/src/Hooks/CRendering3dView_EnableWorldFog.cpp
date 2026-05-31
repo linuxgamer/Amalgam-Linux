@@ -10,8 +10,8 @@ MAKE_HOOK(CRendering3dView_EnableWorldFog, S::CRendering3dView_EnableWorldFog(),
 	if (!(Vars::Visuals::World::Modulations.Value & Vars::Visuals::World::ModulationsEnum::Fog) || SDK::CleanScreenshot())
 		return CALL_ORIGINAL();
 
-	CALL_ORIGINAL();
-	if (auto pRenderContext = I::MaterialSystem->GetRenderContext())
+        CALL_ORIGINAL();
+        if (I::MaterialSystem && auto pRenderContext = I::MaterialSystem->GetRenderContext())
 	{
 		if (Vars::Colors::FogModulation.Value.a)
 		{
