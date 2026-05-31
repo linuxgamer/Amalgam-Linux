@@ -27,7 +27,7 @@ MAKE_HOOK(IVModelRender_DrawModelExecute, U::Memory.GetVirtual(I::ModelRender, 1
 		return;
 
 	auto pEntity = I::ClientEntityList->GetClientEntity(pInfo.entity_index);
-	auto pRenderContext = I::MaterialSystem->GetRenderContext();
+	auto pRenderContext = I::MaterialSystem ? I::MaterialSystem->GetRenderContext() : nullptr;
 	if (pEntity && pRenderContext && pEntity->GetClassID() == ETFClassID::CTFViewModel)
 	{
 		F::Glow.RenderViewmodel(pState, pInfo, pBoneToWorld);
@@ -66,6 +66,8 @@ MAKE_HOOK(CBaseAnimating_InternalDrawModel, S::CBaseAnimating_InternalDrawModel(
 	if (!s_bDrawingViewmodel || !(flags & STUDIO_RENDER))
 		return CALL_ORIGINAL(rcx, flags);
 
+	if (!I::MaterialSystem)
+		return CALL_ORIGINAL(rcx, flags);
 	auto pRenderContext = I::MaterialSystem->GetRenderContext();
 	if (!pRenderContext)
 		return CALL_ORIGINAL(rcx, flags);
