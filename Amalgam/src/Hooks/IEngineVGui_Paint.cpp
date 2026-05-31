@@ -20,8 +20,16 @@ MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 {
 	DEBUG_RETURN(IEngineVGui_Paint, rcx, iMode);
 
-	if (G::Unload)
+	static bool bInPaint = false;
+	if (bInPaint)
 		return CALL_ORIGINAL(rcx, iMode);
+	bInPaint = true;
+
+	if (G::Unload)
+	{
+		bInPaint = false;
+		return CALL_ORIGINAL(rcx, iMode);
+	}
 
 	if (iMode & PAINT_INGAMEPANELS && !SDK::CleanScreenshot())
 	{
@@ -66,4 +74,5 @@ MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 		}
 		H::Draw.End();
 	}
+	bInPaint = false;
 }
