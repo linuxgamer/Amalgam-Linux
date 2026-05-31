@@ -88,6 +88,9 @@ static inline void ModifyKeyValues(KeyValues* pKV)
 
 void CMaterials::LoadMaterials()
 {
+	if (!I::MaterialSystem)
+		return;
+
 	// default materials
 	StoreStruct( // hacky
 		"None",
@@ -245,6 +248,9 @@ void CMaterials::UnloadMaterials()
 
 void CMaterials::ReloadMaterials()
 {
+	if (!I::MaterialSystem)
+		return;
+
 	UnloadMaterials();
 
 	LoadMaterials();
