@@ -7,8 +7,10 @@ MAKE_HOOK(IMatSystemSurface_OnScreenSizeChanged, U::Memory.GetVirtual(I::MatSyst
 {
 	DEBUG_RETURN(IMatSystemSurface_OnScreenSizeChanged, rcx, nOldWidth, nOldHeight);
 
-	CALL_ORIGINAL(rcx, nOldWidth, nOldHeight);
+        CALL_ORIGINAL(rcx, nOldWidth, nOldHeight);
 
-	H::Fonts.Reload();
-	F::Materials.ReloadMaterials();
-}
+        if (!G::Unload)
+        {
+                H::Fonts.Reload();
+                F::Materials.ReloadMaterials();
+        }
