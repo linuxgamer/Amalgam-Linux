@@ -10,8 +10,11 @@ MAKE_HOOK(CSkyboxView_Enable3dSkyboxFog, S::CSkyboxView_Enable3dSkyboxFog(), voi
 	if (!(Vars::Visuals::World::Modulations.Value & Vars::Visuals::World::ModulationsEnum::Fog) || SDK::CleanScreenshot())
 		return CALL_ORIGINAL(rcx);
 
-        CALL_ORIGINAL(rcx);
-        if (I::MaterialSystem && auto pRenderContext = I::MaterialSystem->GetRenderContext())
+	CALL_ORIGINAL(rcx);
+	if (I::MaterialSystem)
+	{
+		auto pRenderContext = I::MaterialSystem->GetRenderContext();
+		if (pRenderContext)
 	{
 		if (Vars::Colors::FogModulation.Value.a)
 		{
@@ -24,5 +27,6 @@ MAKE_HOOK(CSkyboxView_Enable3dSkyboxFog, S::CSkyboxView_Enable3dSkyboxFog(), voi
 		}
 		else
 			pRenderContext->FogMode(MATERIAL_FOG_NONE);
+	}
 	}
 }
