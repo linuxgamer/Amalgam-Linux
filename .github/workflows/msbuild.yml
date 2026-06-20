@@ -23,14 +23,23 @@ jobs:
 
     - name: Build
       working-directory: ${{ env.GITHUB_WORKSPACE }}
-      run: msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }}
-    
+      run: |
+        msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} ^
+          /p:DebugType=full ^
+          /p:GenerateDebugInformation=true ^
+          /p:GenerateMapFile=true
+
     - uses: actions/upload-artifact@v4
       with:
         name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}
         path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
-    
+
     - uses: actions/upload-artifact@v4
       with:
         name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}PDB
         path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}Map
+        path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.map
