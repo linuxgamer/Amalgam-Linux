@@ -254,22 +254,22 @@ void CMaterials::ReloadMaterials()
 
 void CMaterials::SetColor(Material_t* pMaterial, Color_t tColor)
 {
-	float r = tColor.r / 255.f;
-	float g = tColor.g / 255.f;
-	float b = tColor.b / 255.f;
-	float a = tColor.a / 255.f;
+    if (!pMaterial || !I::RenderView)
+        return;
 
-	I::RenderView->SetColorModulation(r, g, b);
-	I::RenderView->SetBlend(a);
+    float r = tColor.r / 255.f;
+    float g = tColor.g / 255.f;
+    float b = tColor.b / 255.f;
+    float a = tColor.a / 255.f;
 
-	if (pMaterial)
-	{
-		StoreVars(*pMaterial);
-		if (pMaterial->m_phongtint)
-			pMaterial->m_phongtint->SetVecValue(r, g, b);
-		if (pMaterial->m_envmaptint)
-			pMaterial->m_envmaptint->SetVecValue(r, g, b);
-	}
+    I::RenderView->SetColorModulation(r, g, b);
+    I::RenderView->SetBlend(a);
+
+    StoreVars(*pMaterial);
+    if (pMaterial->m_phongtint)
+        pMaterial->m_phongtint->SetVecValue(r, g, b);
+    if (pMaterial->m_envmaptint)
+        pMaterial->m_envmaptint->SetVecValue(r, g, b);
 }
 
 
