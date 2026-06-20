@@ -21,21 +21,51 @@ jobs:
       working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: nuget restore
 
-    - name: Build
+    - name: Build with debug info and map generation
       working-directory: ${{ env.GITHUB_WORKSPACE }}
-      run: msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} /p:DebugType=full /p:GenerateDebugInformation=true /p:GenerateMapFile=true
+      run: |
+        msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} ^
+          /p:DebugType=full ^
+          /p:GenerateDebugInformation=true ^
+          /p:GenerateMapFile=true ^
+          /p:LinkerAdditionalOptions="/MAP"
 
-    - uses: actions/upload-artifact@v4
+    - name: List all build outputs (debug)
+      run: |
+        Write-Host "=== Searching for .pdb and .map files ==="
+        Get-ChildItem -Recurse -Include *.pdb, *.map, *.dll, *.exe | ForEach-Object { Write-Host $_.FullName }
+
+    - name: Upload DLLs
+      uses: actions/upload-artifact@v4
       with:
         name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}
-        path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
+        path: |
+          output/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
+          **/bin/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload PDBs
+      uses: actions/upload-artifact@v4
       with:
         name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}PDB
-        path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
+        path: |
+          output/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
+          **/bin/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload MAP files (if any)
+      uses: actions/upload-artifact@v4
       with:
         name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}Map
-        path: output/${{ matrix.platform }}/${{ matrix.configuration }}/*.map
+        path: |
+          output/${{ matrix.platform }}/${{ matrix.configuration }}/*.map
+          **/bin/${{ matrix.platform }}/${{ matrix.configuration }}/*.map
+          **/*.map
+        if-no-files-found: warn   # don't fail if no maps
+
+    - name: Upload all other build artifacts (for fallback)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}FullBuild
+        path: |
+          output/
+          **/bin/
+        if-no-files-found: warn
