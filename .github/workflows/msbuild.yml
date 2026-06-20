@@ -23,12 +23,7 @@ jobs:
 
     - name: Build with debug info and map generation
       working-directory: ${{ env.GITHUB_WORKSPACE }}
-      run: |
-        msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} ^
-          /p:DebugType=full ^
-          /p:GenerateDebugInformation=true ^
-          /p:GenerateMapFile=true ^
-          /p:LinkerAdditionalOptions="/MAP"
+      run: msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} /p:DebugType=full /p:GenerateDebugInformation=true /p:GenerateMapFile=true /p:LinkerAdditionalOptions="/MAP"
 
     - name: List all build outputs (debug)
       run: |
@@ -42,6 +37,7 @@ jobs:
         path: |
           output/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
           **/bin/${{ matrix.platform }}/${{ matrix.configuration }}/*.dll
+          **/x64/ReleaseAVX2/*.dll   # Fallback common paths
 
     - name: Upload PDBs
       uses: actions/upload-artifact@v4
@@ -50,6 +46,7 @@ jobs:
         path: |
           output/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
           **/bin/${{ matrix.platform }}/${{ matrix.configuration }}/*.pdb
+          **/x64/ReleaseAVX2/*.pdb
 
     - name: Upload MAP files (if any)
       uses: actions/upload-artifact@v4
@@ -59,13 +56,14 @@ jobs:
           output/${{ matrix.platform }}/${{ matrix.configuration }}/*.map
           **/bin/${{ matrix.platform }}/${{ matrix.configuration }}/*.map
           **/*.map
-        if-no-files-found: warn   # don't fail if no maps
+        if-no-files-found: warn
 
-    - name: Upload all other build artifacts (for fallback)
+    - name: Upload full build folder (fallback)
       uses: actions/upload-artifact@v4
       with:
         name: Amalgam${{ matrix.platform }}${{ matrix.configuration }}FullBuild
         path: |
           output/
           **/bin/
+          **/x64/
         if-no-files-found: warn
