@@ -23,11 +23,7 @@ jobs:
 
     - name: Build
       working-directory: ${{ env.GITHUB_WORKSPACE }}
-      run: |
-        msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} ^
-          /p:DebugType=full ^
-          /p:GenerateDebugInformation=true ^
-          /p:GenerateMapFile=true
+      run: msbuild Amalgam.sln /p:Platform=${{ matrix.platform }} /p:Configuration=${{ matrix.configuration }} /p:DebugType=full /p:GenerateDebugInformation=true /p:GenerateMapFile=true
 
     - uses: actions/upload-artifact@v4
       with:
