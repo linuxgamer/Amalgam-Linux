@@ -1,6 +1,5 @@
 #include "../SDK/SDK.h"
 
-#include "../Features/Visuals/Notifications/Notifications.h"
 #include "../Features/Visuals/ESP/ESP.h"
 #include "../Features/Visuals/OffscreenArrows/OffscreenArrows.h"
 #include "../Features/Visuals/CameraWindow/CameraWindow.h"
@@ -14,6 +13,7 @@
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/PacketManip/AntiAim/AntiAim.h"
 #include "../Features/Aimbot/AutoHeal/AutoHeal.h"
+#include "../Features/Debug/Debug.h"
 
 MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 	void* rcx, int iMode)
@@ -23,7 +23,11 @@ MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 	if (G::Unload)
 		return CALL_ORIGINAL(rcx, iMode);
 
-	if (iMode & PAINT_INGAMEPANELS && !SDK::CleanScreenshot())
+	if (iMode & PAINT_UIPANELS)
+	{
+		H::Draw.UpdateKeyStrings();
+	}
+	else if (iMode & PAINT_INGAMEPANELS && !SDK::CleanScreenshot())
 	{
 		H::Draw.UpdateScreenSize();
 		H::Draw.UpdateW2SMatrix();
@@ -48,22 +52,14 @@ MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 			F::SpectatorList.Draw(pLocal);
 			F::CritHack.Draw(pLocal);
 			F::Ticks.Draw(pLocal);
-			F::Visuals.DrawDebugInfo(pLocal);
+
+#ifdef DEBUG_INFO
+			F::Debug.Draw(pLocal);
+#endif
 		}
 		H::Draw.End();
 	}
 
 	CALL_ORIGINAL(rcx, iMode);
 
-	if (iMode & PAINT_UIPANELS && !SDK::CleanScreenshot())
-	{
-		H::Draw.UpdateScreenSize();
-		H::Draw.UpdateKeyStrings();
-
-		H::Draw.Start();
-		{
-			F::Notifications.Draw();
-		}
-		H::Draw.End();
-	}
 }

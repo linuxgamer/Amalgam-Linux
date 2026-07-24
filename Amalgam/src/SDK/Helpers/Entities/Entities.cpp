@@ -257,7 +257,7 @@ void CEntities::Store()
 		if (n != I::EngineClient->GetLocalPlayer())
 		{
 			if (float flOldSimTime = m_aSimTimes[n], flSimTime = m_aSimTimes[n] = pPlayer->m_flSimulationTime();
-				m_aDeltaTimes[n] = flSimTime != flOldSimTime)
+				m_aDeltaTimes[n] = flSimTime > flOldSimTime)
 			{
 				m_aDeltaTimes[n] = m_aLagTimes[n] = TICKS_TO_TIME(std::clamp(TIME_TO_TICKS(flSimTime - flOldSimTime) - iLag, 1, 24));
 				m_aSetTicks[n] = I::GlobalVars->tickcount;
@@ -359,13 +359,10 @@ void CEntities::ManualNetwork(const StartSoundParams_t& params)
 	case ETFClassID::CTFPlayer:
 		pEntity->As<CTFPlayer>()->m_vecVelocity() = (params.origin - pEntity->m_vecOrigin()) / std::min(I::GlobalVars->curtime - s_mDormancy[n].m_flLastUpdate, 1.f);
 		pEntity->SetAbsVelocity(pEntity->As<CTFPlayer>()->m_vecVelocity()); SetAvgVelocity(pEntity->entindex(), pEntity->As<CTFPlayer>()->m_vecVelocity());
-		s_mDormancy[n] = { params.origin, I::GlobalVars->curtime };
-		break;
-	case ETFClassID::CObjectSentrygun:
-	case ETFClassID::CObjectDispenser:
-	case ETFClassID::CObjectTeleporter:
-		s_mDormancy[n] = { params.origin, I::GlobalVars->curtime };
 	}
+	pEntity->SetAbsOrigin(pEntity->m_vecOrigin() = params.origin);
+
+	s_mDormancy[n] = { params.origin, I::GlobalVars->curtime };
 }
 bool CEntities::ManageDormancy(CBaseEntity* pEntity)
 {
@@ -388,20 +385,18 @@ bool CEntities::ManageDormancy(CBaseEntity* pEntity)
 
 	if (bDormant)
 	{
-		if (pEntity->IsPlayer())
+		if (auto pResource = GetResource(); pResource && pEntity->IsPlayer())
 		{
-			if (auto pResource = GetResource(); pResource)
-			{
-				pEntity->As<CTFPlayer>()->m_lifeState() = pResource->m_bAlive(n) ? LIFE_ALIVE : LIFE_DEAD;
-				pEntity->As<CTFPlayer>()->m_iHealth() = pResource->m_iHealth(n);
-			}
+			auto pPlayer = pEntity->As<CTFPlayer>();
+			pPlayer->m_lifeState() = pResource->m_bAlive(n) ? LIFE_ALIVE : LIFE_DEAD;
+			pPlayer->m_iHealth() = pResource->m_iHealth(n);
+			if (pPlayer->IsAlive() && pPlayer->m_iObserverMode() != OBS_MODE_NONE)
+				pPlayer->m_iObserverMode() = OBS_MODE_NONE;
 		}
 		if (s_mDormancy.contains(n))
 		{
 			auto& tDormancy = s_mDormancy[n];
-			if (tDormancy.m_flLastUpdate + flDuration > I::GlobalVars->curtime)
-				pEntity->SetAbsOrigin(pEntity->m_vecOrigin() = tDormancy.m_vLocation);
-			else
+			if (tDormancy.m_flLastUpdate + flDuration < I::GlobalVars->curtime || pEntity->IsPlayer() && !pEntity->As<CTFPlayer>()->IsAlive())
 				s_mDormancy.erase(n);
 		}
 	}

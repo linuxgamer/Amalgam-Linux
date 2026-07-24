@@ -18,7 +18,7 @@
 static std::map<std::string, int> s_mTraceCount = {};
 #endif
 #ifdef SPLASH_DEBUG2
-//#include "../../Visuals/Visuals.h"
+//#include "../../Debug/Debug.h"
 #endif
 
 static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
@@ -31,7 +31,7 @@ static inline std::vector<Target_t> GetTargets(CTFPlayer* pLocal, CTFWeaponBase*
 	{
 		auto eGroup = EntityEnum::Invalid;
 		if (Vars::Aimbot::General::Target.Value & Vars::Aimbot::General::TargetEnum::Players)
-			eGroup = !F::AimbotGlobal.FriendlyFire() || Vars::Aimbot::General::Ignore.Value & Vars::Aimbot::General::IgnoreEnum::Team ? EntityEnum::PlayerEnemy : EntityEnum::PlayerAll;
+			eGroup = !SDK::FriendlyFire() || Vars::Aimbot::General::Ignore.Value & Vars::Aimbot::General::IgnoreEnum::Team ? EntityEnum::PlayerEnemy : EntityEnum::PlayerAll;
 		switch (pWeapon->GetWeaponID())
 		{
 		case TF_WEAPON_CROSSBOW:
@@ -551,7 +551,7 @@ static inline void HandleFace(Face_t& tFace, std::vector<Setup_t>& vPoints, floa
 		// don't particularly like the hacky random epsilons
 		int iFaceClosest = SDK::StdRandomInt(iSamples < 2 ? 0 : iSamples < 4 ? 1 : 2, iSamples < 2 ? 1 : 2);
 		//int iEdgeClosest = SDK::StdRandomInt(iSamples < 8 ? 0 : iSamples < 16 ? 1 : 2, iSamples < 8 ? 1 : 2); // eats up a bit too much performance for my liking
-		int iEdgeRandom = SDK::StdRandomInt(iSamples < 8 ? 0 : iSamples < 16 ? 1 : 2, iSamples < 3 ? 0 : iSamples < 12 ? 1 : 2);
+		int iEdgeRandom = SDK::StdRandomInt(iSamples < 8 ? 0 : iSamples < 16 ? 1 : 2, iSamples < 3 && iFaceClosest ? 0 : iSamples < 12 ? 1 : 2);
 		iEdgeRandom += iFaceClosest; //iEdgeClosest += iFaceClosest, iEdgeRandom += iEdgeClosest; //, iSamples += iEdgeRandom;
 #ifdef SPLASH_DEBUG2
 		Color_t tColor = { byte(SDK::StdRandomInt(0, 255)), byte(SDK::StdRandomInt(0, 255)), byte(SDK::StdRandomInt(0, 255)) };
@@ -559,7 +559,7 @@ static inline void HandleFace(Face_t& tFace, std::vector<Setup_t>& vPoints, floa
 		F::World.DrawFace({ { vVertex1, vVertex2, vVertex3 }, tFace.m_vNormal, tFace.m_iType }, DrawTypeEnum::Edges | DrawTypeEnum::Faces, tColor);
 #endif
 #ifdef DEBUG_TEXT
-		F::Visuals.AddDebugText(std::format("{}:{}:{}"/*:{}"*/, iFaceClosest, /*iEdgeClosest,*/ iEdgeRandom, iSamples), (vVertex1 + vVertex2 + vVertex3) / 3, tColor);
+		F::Debug.AddText(std::format("{}:{}:{}"/*:{}"*/, iFaceClosest, /*iEdgeClosest,*/ iEdgeRandom, iSamples), (vVertex1 + vVertex2 + vVertex3) / 3, tColor);
 #endif
 #endif
 		for (int s = 0; s < iSamples; s++)
@@ -1181,7 +1181,7 @@ bool CAimbotProjectile::TestAngle(const Vec3& vPoint, const Vec3& vAngles, int i
 	filter.iPlayer = iType == PointTypeEnum::Direct ? PLAYER_DEFAULT : PLAYER_NONE;
 	filter.bMisc = iType == PointTypeEnum::Direct;
 	int nMask = MASK_SOLID;
-	if (iType == PointTypeEnum::Direct && F::AimbotGlobal.FriendlyFire())
+	if (iType == PointTypeEnum::Direct && SDK::FriendlyFire())
 	{
 		switch (pWeapon->GetWeaponID())
 		{	// only weapons that actually hit teammates properly
@@ -1466,6 +1466,14 @@ bool CAimbotProjectile::HandleDirect(DirectHistory_t& mDirectHistory)
 	uint8_t iType = it->first;
 	auto& vDirectHistory = it->second;
 
+	if (F::ProjSim.m_bPhysics)
+	{
+		for (auto& tHistory : vDirectHistory)
+		{
+			if (I::EngineTrace->GetPointContents(tHistory.m_vPoint) & CONTENTS_WATER)
+				tHistory.m_iPriority = COORD_EXTENT - tHistory.m_vPoint.z;
+		}
+	}
 	std::sort(vDirectHistory.begin(), vDirectHistory.end(), [&](const Direct_t& a, const Direct_t& b) -> bool
 	{
 		return a.m_iPriority < b.m_iPriority;
@@ -1931,7 +1939,7 @@ bool CAimbotProjectile::RunMain(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 	G::TriangleStorage.clear();
 #endif
 #if defined(SPLASH_DEBUG2) && defined(DEBUG_TEXT)
-	F::Visuals.ClearDebugText();
+	F::Debug.ClearText();
 #endif
 	for (auto& tTarget : vTargets)
 	{
@@ -2027,12 +2035,27 @@ bool CAimbotProjectile::RunMain(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUser
 						pCmd->buttons &= ~IN_ATTACK;
 				}
 				break;
+			case TF_WEAPON_GRAPPLINGHOOK:
+				break;
 			default:
 				pCmd->buttons |= IN_ATTACK;
 			}
 		}
 
-		F::Aimbot.m_bRan = G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
+		if (nWeaponID != TF_WEAPON_GRAPPLINGHOOK)
+			F::Aimbot.m_bRan = G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
+		else
+		{
+			Vec3 vOriginalAngles = pCmd->viewangles; int iOriginalButtons = pCmd->buttons;
+			pCmd->viewangles = tTarget.m_vAngleTo, pCmd->buttons |= IN_ATTACK;
+			F::Aimbot.m_bRan = G::Attacking = SDK::IsAttacking(pLocal, pWeapon, pCmd, true);
+			pCmd->viewangles = vOriginalAngles, pCmd->buttons = iOriginalButtons;
+			if (!G::Attacking)
+				continue;
+
+			if (Vars::Aimbot::General::AutoShoot.Value)
+				pCmd->buttons |= IN_ATTACK;
+		}
 		DrawVisuals(iResult, tTarget, m_vPlayerPath, m_vProjectilePath, m_vBoxes);
 
 		Aim(pCmd, tTarget.m_vAngleTo);

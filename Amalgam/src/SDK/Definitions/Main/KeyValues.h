@@ -2,6 +2,8 @@
 #include "../Types.h"
 #include <stdint.h>
 
+class CKeyValuesGrowableStringTable;
+
 enum types_t
 {
 	TYPE_NONE = 0,
@@ -33,11 +35,12 @@ private:
 	char m_iDataType;
 	char m_bHasEscapeSequences;
 	char m_bEvaluateConditionals;
-	char unused[1];
+	char m_bUnknown;
 
 	KeyValues* m_pPeer;
 	KeyValues* m_pSub;
 	KeyValues* m_pChain;
+	CKeyValuesGrowableStringTable* m_pGrowableStringTable;
 
 public:
 	class AutoDelete
@@ -55,9 +58,9 @@ public:
 		KeyValues* m_pKeyValues;
 	};
 
-	bool LoadFromBuffer(char const* resourceName, const char* pBuffer, void* pFileSystem = 0, const char* pPathID = 0);
-	void Initialize(const char* name);
 	KeyValues(const char* name);
+	void Initialize(const char* name);
+	bool LoadFromBuffer(char const* resourceName, const char* pBuffer, void* pFileSystem = 0, const char* pPathID = 0);
 
 	void* operator new(size_t iAllocSize);
 	void* operator new(size_t iAllocSize, int nBlockUse, const char* pFileName, int nLine);
