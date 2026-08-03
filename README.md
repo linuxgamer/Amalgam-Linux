@@ -19,3 +19,6 @@
 
 ## If you have problems:
 Make an issue [here](https://github.com/linuxgamer/Amalgam-Linux/issues).
+
+## If you like pasting:
+Check out other [branches](https://github.com/linuxgamer/Amalgam-Linux/branches)! there is source code of some movement cheats, so you might find something intresting.
