@@ -3,7 +3,7 @@
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Backtrack/Backtrack.h"
 #include "../Features/Binds/Binds.h"
-#include "../Features/CheatDetection/CheatDetection.h"
+#include "../Features/CheaterDetection/CheaterDetection.h"
 #include "../Features/CritHack/CritHack.h"
 #include "../Features/Players/PlayerUtils.h"
 #include "../Features/Simulation/MovementSimulation/MovementSimulation.h"
@@ -18,7 +18,10 @@
 MAKE_HOOK(CHLClient_FrameStageNotify, U::Memory.GetVirtual(I::Client, 35), void,
 	void* rcx, ClientFrameStage_t curStage)
 {
-	DEBUG_RETURN(CHLClient_FrameStageNotify, rcx, curStage);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CHLClient_FrameStageNotify[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, curStage);
+#endif
 
 	if (G::Unload)
 		return CALL_ORIGINAL(rcx, curStage);
@@ -50,10 +53,10 @@ MAKE_HOOK(CHLClient_FrameStageNotify, U::Memory.GetVirtual(I::Client, 35), void,
 		F::ESP.Store(pLocal);
 		F::Chams.Store(pLocal);
 		F::Glow.Store(pLocal);
-		F::OffscreenArrows.Store();
-		F::Visuals.Store();
+		F::Arrows.Store(pLocal);
+		F::Visuals.Store(pLocal);
 
-		F::CheatDetection.Run();
+		F::CheaterDetection.Run();
 		F::Spectate.NetUpdateEnd(pLocal);
 
 		F::Visuals.Modulate();

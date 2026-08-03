@@ -3,7 +3,10 @@
 MAKE_HOOK(CTFGCClientSystem_UpdateAssignedLobby, S::CTFGCClientSystem_UpdateAssignedLobby(), bool,
 	void* rcx)
 {
-	DEBUG_RETURN(CTFGCClientSystem_UpdateAssignedLobby, rcx);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CTFGCClientSystem_UpdateAssignedLobby[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx);
+#endif
 
 	bool bReturn = CALL_ORIGINAL(rcx);
 

@@ -33,10 +33,13 @@ static inline void SetScoreboardColor(int iIndex, Color_t& tColor)
 MAKE_HOOK(CTFPlayerPanel_GetTeam, S::CTFPlayerPanel_GetTeam(), int,
 	void* rcx)
 {
-	DEBUG_RETURN(CTFPlayerPanel_GetTeam, rcx);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CTFPlayerPanel_GetTeam[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx);
+#endif
 
-	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	const auto dwDesired = S::CTFTeamStatusPlayerPanel_Update_GetTeam_Call();
+	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 
 	int iReturn = CALL_ORIGINAL(rcx);
 
@@ -60,10 +63,13 @@ MAKE_HOOK(CTFPlayerPanel_GetTeam, S::CTFPlayerPanel_GetTeam(), int,
 MAKE_HOOK(vgui_Panel_SetBgColor, S::vgui_Panel_SetBgColor(), void,
 	void* rcx, Color_t color)
 {
-	DEBUG_RETURN(CTFPlayerPanel_GetTeam, rcx, color);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::vgui_Panel_SetBgColor[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, color);
+#endif
 
-	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	const auto dwDesired = S::CTFTeamStatusPlayerPanel_Update_SetBgColor_Call();
+	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 
 	if (dwRetAddr == dwDesired && Vars::Visuals::UI::ScoreboardColors.Value && !SDK::CleanScreenshot())
 		SetScoreboardColor(s_iPlayerIndex, color);
@@ -74,7 +80,10 @@ MAKE_HOOK(vgui_Panel_SetBgColor, S::vgui_Panel_SetBgColor(), void,
 MAKE_HOOK(CTFTeamStatus_OnTick, S::CTFTeamStatus_OnTick(), void,
 	void* rcx)
 {
-	DEBUG_RETURN(CTFTeamStatus_OnTick, rcx);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CTFTeamStatus_OnTick[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx);
+#endif
 
 	s_pTeamStatus = rcx;
 
@@ -84,7 +93,10 @@ MAKE_HOOK(CTFTeamStatus_OnTick, S::CTFTeamStatus_OnTick(), void,
 MAKE_HOOK(CVGui_RunFrame, S::CVGui_RunFrame(), void,
 	void* rcx)
 {
-	DEBUG_RETURN(CVGui_RunFrame, rcx);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CVGui_RunFrame[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx);
+#endif
 
 	if (!s_pTeamStatus)
 		return CALL_ORIGINAL(rcx);

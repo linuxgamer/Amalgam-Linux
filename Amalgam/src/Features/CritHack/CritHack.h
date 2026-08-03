@@ -27,7 +27,7 @@ private:
 
 	void UpdateWeaponInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon);
 	void UpdateInfo(CTFPlayer* pLocal, CTFWeaponBase* pWeapon);
-	int GetCritRequest(CUserCmd* pCmd, CTFPlayer* pLocal, CTFWeaponBase* pWeapon);
+	int GetCritRequest(CUserCmd* pCmd, CTFWeaponBase* pWeapon);
 
 	void Reset();
 	void StoreHealthHistory(int iIndex, int iHealth, CTFPlayer* pPlayer = nullptr);
@@ -63,7 +63,6 @@ public:
 
 	bool WeaponCanCrit(CTFWeaponBase* pWeapon, bool bWeaponOnly = false);
 	int PredictCmdNum(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
-	bool ShouldForceEffects(CTFPlayer* pLocal);
 
 	float GetCritDamage() { return m_iCritDamage; }
 	float GetRangedDamage() { return m_iRangedDamage; }

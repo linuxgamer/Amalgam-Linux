@@ -2,12 +2,15 @@
 #include "Interface.h"
 #include "../Main/CBaseHandle.h"
 #include "../Definitions.h"
-
-#define INVALID_ENTITY_HANDLE INVALID_EHANDLE_INDEX
+#include "../Types.h"
 
 class CGameTrace;
 class IPhysicsSurfaceProps;
 enum PLAYER_ANIM;
+
+typedef CBaseHandle EntityHandle_t;
+
+#define INVALID_ENTITY_HANDLE INVALID_EHANDLE_INDEX
 
 class IMoveHelper
 {

@@ -3,7 +3,7 @@
 #include "../../Core/Core.h"
 #include "../../Features/Aimbot/AutoHeal/AutoHeal.h"
 #include "../../Features/Backtrack/Backtrack.h"
-#include "../../Features/CheatDetection/CheatDetection.h"
+#include "../../Features/CheaterDetection/CheaterDetection.h"
 #include "../../Features/CritHack/CritHack.h"
 #include "../../Features/Misc/Misc.h"
 #include "../../Features/PacketManip/AntiAim/AntiAim.h"
@@ -55,23 +55,16 @@ void CEventListener::FireGameEvent(IGameEvent* pEvent)
 	switch (uHash)
 	{
 	case FNV1A::Hash32Const("player_hurt"):
-	{
 		F::Resolver.PlayerHurt(pEvent);
-		F::CheatDetection.ReportDamage(pEvent);
-		return;
-	}
+		F::CheaterDetection.ReportDamage(pEvent);
+		break;
 	case FNV1A::Hash32Const("player_spawn"):
-	{
-		if (I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid")) != I::EngineClient->GetLocalPlayer())
-			return;
-
-		F::Backtrack.SetLerp();
-		return;
-	}
+		F::Backtrack.SetLerp(pEvent);
+		break;
 	case FNV1A::Hash32Const("revive_player_notify"):
 	{
 		if (!Vars::Misc::MannVsMachine::InstantRevive.Value || pEvent->GetInt("entindex") != I::EngineClient->GetLocalPlayer())
-			return;
+			break;
 
 		KeyValues* kv = new KeyValues("MVM_Revive_Response");
 		kv->SetBool("accepted", true);

@@ -1,5 +1,6 @@
 #pragma once
 #include "../../SDK/SDK.h"
+#include <optional>
 
 struct ResolveData
 {
@@ -37,7 +38,7 @@ private:
 
 public:
 	void FrameStageNotify();
-	void CreateMove();
+	void CreateMove(CTFPlayer* pLocal);
 	void HitscanRan(CTFPlayer* pLocal, CTFPlayer* pTarget, CTFWeaponBase* pWeapon, int nHitbox = HITBOX_MAX);
 	void PlayerHurt(IGameEvent* pEvent);
 	void SetYaw(int iUserID, float flValue, bool bAuto = false);

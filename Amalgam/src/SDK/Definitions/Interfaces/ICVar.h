@@ -5,6 +5,7 @@
 
 class ConCommandBase;
 class ConCommand;
+
 typedef int CVarDLLIdentifier_t;
 
 class IConsoleDisplayFunc

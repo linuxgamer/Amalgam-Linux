@@ -1,6 +1,5 @@
 #pragma once
 #include "Interface.h"
-#include "../Main/CUserCmd.h"
 #include "../Misc/bitbuf.h"
 #include "../Misc/IClientMode.h"
 #include "../Misc/ChecksumCRC.h"

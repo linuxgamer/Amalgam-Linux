@@ -3,19 +3,18 @@
 #include "../../Definitions/Classes.h"
 #include "../../Vars.h"
 
-Enum(Entity,
+Enum(Entity, Invalid = -1,
 	PlayerAll, PlayerEnemy, PlayerTeam,
 	BuildingAll, BuildingEnemy, BuildingTeam,
-	/*PickupHealth, PickupAmmo, PickupMoney, PickupPowerup, PickupSpellbook, PickupGargoyle,*/
-	WorldProjectile,  WorldNPC, WorldBomb, /*WorldObjective,*/
-	LocalStickies, LocalFlares, SniperDots,
-	Invalid, GroupsMax
+	PickupHealth, PickupAmmo, PickupMoney, PickupPowerup, PickupSpellbook, PickupGargoyle,
+	WorldProjectile, WorldObjective, WorldNPC, WorldBomb,
+	LocalStickies, LocalFlares, SniperDots
 )
 
 struct DormantData
 {
-	Vec3 m_vLocation;
-	float m_flLastUpdate = 0.f;
+	Vec3 Location;
+	float LastUpdate = 0.f;
 };
 
 struct VelFixRecord
@@ -33,15 +32,16 @@ private:
 	CTFWeaponBase* m_pLocalWeapon = nullptr;
 	CTFPlayerResource* m_pPlayerResource = nullptr;
 
-	std::array<std::vector<CBaseEntity*>, EntityEnum::GroupsMax> m_aGroups = {};
+	std::unordered_map<EntityEnum::EntityEnum, std::vector<CBaseEntity*>> m_mGroups = {};
 
-	std::array<float, MAX_PLAYERS> m_aSimTimes = {}, m_aDeltaTimes = {}, m_aLagTimes = {};
-	std::array<int, MAX_PLAYERS> m_aChokes = {}, m_aSetTicks = {};
-	std::array<Vec3, MAX_PLAYERS> m_aOldAngles = {}, m_aEyeAngles = {};
-	std::array<bool, MAX_PLAYERS> m_aLagCompensation = {};
-	std::array<Vec3, MAX_PLAYERS> m_aAvgVelocities = {};
-	std::array<std::deque<VelFixRecord>, MAX_PLAYERS> m_aOrigins = {};
-	std::array<uint32_t, MAX_EDICTS> m_aModels = {};
+	std::unordered_map<int, float> m_mDeltaTimes = {}, m_mLagTimes = {};
+	std::unordered_map<int, int> m_mChokes = {}, m_mSetTicks = {};
+	std::unordered_map<int, Vec3> m_mOldAngles = {}, m_mEyeAngles = {};
+	std::unordered_map<int, bool> m_mLagCompensation = {};
+	std::unordered_map<int, DormantData> m_mDormancy = {};
+	std::unordered_map<int, Vec3> m_mAvgVelocities = {};
+	std::unordered_map<int, uint32_t> m_mModels = {};
+	std::unordered_map<int, std::deque<VelFixRecord>> m_mOrigins = {};
 
 	std::unordered_map<int, int> m_mIPriorities = {};
 	std::unordered_map<uint32_t, int> m_mUPriorities = {};
@@ -70,20 +70,20 @@ public:
 	CTFWeaponBase* GetWeapon();
 	CTFPlayerResource* GetResource();
 
-	const std::vector<CBaseEntity*>& GetGroup(uint8_t iGroup);
+	const std::vector<CBaseEntity*>& GetGroup(const EntityEnum::EntityEnum iGroup);
 
-	float GetDeltaTime(uint16_t iIndex);
-	float GetLagTime(uint16_t iIndex);
-	int GetChoke(uint16_t iIndex);
-	Vec3 GetEyeAngles(uint16_t iIndex);
-	Vec3 GetDeltaAngles(uint16_t iIndex);
-	bool GetLagCompensation(uint16_t iIndex);
-	void SetLagCompensation(uint16_t iIndex, bool bLagComp);
-	Vec3* GetAvgVelocity(uint16_t iIndex);
-	void SetAvgVelocity(uint16_t iIndex, Vec3 vAvgVelocity);
-	std::deque<VelFixRecord>* GetOrigins(uint16_t iIndex);
-	uint32_t GetModel(unsigned short iIndex);
-	DormantData* GetDormancy(unsigned short iIndex);
+	float GetDeltaTime(int iIndex);
+	float GetLagTime(int iIndex);
+	int GetChoke(int iIndex);
+	Vec3 GetEyeAngles(int iIndex);
+	Vec3 GetDeltaAngles(int iIndex);
+	bool GetLagCompensation(int iIndex);
+	void SetLagCompensation(int iIndex, bool bLagComp);
+	bool GetDormancy(int iIndex);
+	Vec3* GetAvgVelocity(int iIndex);
+	void SetAvgVelocity(int iIndex, Vec3 vAvgVelocity);
+	uint32_t GetModel(int iIndex);
+	std::deque<VelFixRecord>* GetOrigins(int iIndex);
 
 	int GetPriority(int iIndex);
 	int GetPriority(uint32_t uAccountID);

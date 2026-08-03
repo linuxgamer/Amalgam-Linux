@@ -4,7 +4,8 @@
 
 void COffscreenArrows::DrawArrowTo(const Vec3& vFromPos, const Vec3& vToPos, Color_t tColor, int iOffset, float flMaxDistance)
 {
-	tColor.a *= Math::RemapVal(vFromPos.DistTo(vToPos), flMaxDistance, flMaxDistance * 0.9f, 0.f, 1.f);
+	float flMap = Math::RemapVal(vFromPos.DistTo(vToPos), flMaxDistance, flMaxDistance * 0.9f, 0.f, 1.f);
+	tColor.a = byte(flMap * 255.f);
 	if (!tColor.a)
 		return;
 
@@ -20,7 +21,7 @@ void COffscreenArrows::DrawArrowTo(const Vec3& vFromPos, const Vec3& vToPos, Col
 	}
 
 	Vec3 vAngle = Math::VectorAngles({ vCenter.x - vScreen.x, vCenter.y - vScreen.y, 0 });
-	const float flDeg = Math::Deg2Rad(vAngle.y);
+	const float flDeg = DEG2RAD(vAngle.y);
 	const float flCos = cos(flDeg);
 	const float flSin = sin(flDeg);
 
@@ -49,7 +50,7 @@ void COffscreenArrows::DrawArrowTo(const Vec3& vFromPos, const Vec3& vToPos, Col
 	);
 }
 
-void COffscreenArrows::Store()
+void COffscreenArrows::Store(CTFPlayer* pLocal)
 {
 	m_mCache.clear();
 	if (!F::Groups.GroupsActive())

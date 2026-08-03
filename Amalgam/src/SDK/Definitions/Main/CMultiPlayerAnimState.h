@@ -1,14 +1,8 @@
 #pragma once
-#include "CBaseHandle.h"
+#include "CBasePlayer.h"
 #include "../Misc/Activity.h"
-#include "../Misc/CUtlVector.h"
 #include "../Misc/CRangeCheckedVar.h"
 #include "../Misc/CInterpolatedVar.h"
-#include "../Types.h"
-
-class CBaseEntity;
-class CBasePlayer;
-class CStudioHdr;
 
 class CAnimationLayer
 {

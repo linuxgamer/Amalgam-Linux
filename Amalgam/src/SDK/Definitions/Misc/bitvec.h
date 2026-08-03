@@ -1,11 +1,27 @@
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//
+// Purpose: 
+//
+//===========================================================================//
+
+#ifndef BITVEC_H
+#define BITVEC_H
+#ifdef _WIN32
 #pragma once
-#include "BaseTypes.h"
+#endif
+
+#include <limits.h>
 #include <cstring>
+#include "BaseTypes.h"
 
 #define FORCEINLINE_TEMPLATE __forceinline
 #define COMPILE_TIME_ASSERT( pred ) static_assert( pred, "Compile time assert constraint is not true: " #pred )
 #define Plat_FastMemset memset
-#define PAD_NUMBER(number, boundary) ( ((number) + ((boundary)-1)) / (boundary) ) * (boundary)
+
+// Pad a number so it lies on an N byte boundary.
+// So PAD_NUMBER(0,4) is 0 and PAD_NUMBER(1,4) is 4
+#define PAD_NUMBER(number, boundary) \
+	( ((number) + ((boundary)-1)) / (boundary) ) * (boundary)
 
 class CBitVecAccessor
 {
@@ -286,7 +302,7 @@ protected:
 	CVarBitVecBase& operator=(const CVarBitVecBase<BITCOUNTTYPE>& from);
 	~CVarBitVecBase(void);
 
-	void 		ValidateOperand(const CVarBitVecBase<BITCOUNTTYPE>& operand) const { /*Assert(GetNumBits() == operand.GetNumBits());*/ }
+	void 		ValidateOperand(const CVarBitVecBase<BITCOUNTTYPE>& operand) const { ((void)0) /*Assert(GetNumBits() == operand.GetNumBits())*/; }
 
 	unsigned	GetEndMask() const { return ::GetEndMask(GetNumBits()); }
 
@@ -360,7 +376,7 @@ public:
 
 protected:
 	CFixedBitVecBase() {}
-	CFixedBitVecBase(int numBits) { /*Assert(numBits == NUM_BITS);*/ } // doesn't make sense, really. Supported to simplify templates & allow easy replacement of variable 
+	CFixedBitVecBase(int numBits) { ((void)0) /*Assert(numBits == NUM_BITS)*/; } // doesn't make sense, really. Supported to simplify templates & allow easy replacement of variable 
 
 	void 		ValidateOperand(const CFixedBitVecBase<NUM_BITS>& operand) const { } // no need, compiler does so statically
 
@@ -1420,3 +1436,8 @@ inline CBitVecAccessor::operator uint32()
 {
 	return m_pDWords[m_iBit >> 5] & (1 << (m_iBit & 31));
 }
+
+
+//=============================================================================
+
+#endif // BITVEC_H

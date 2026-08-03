@@ -13,8 +13,11 @@ enum ParticleAttachment_t
 	PATTACH_CUSTOMORIGIN,			// Create at a custom origin, but don't follow
 	PATTACH_POINT,					// Create on attachment point, but don't follow
 	PATTACH_POINT_FOLLOW,			// Create on attachment point, and update to follow the entity
+
 	PATTACH_WORLDORIGIN,			// Used for control points that don't attach to an entity
+
 	PATTACH_ROOTBONE_FOLLOW,		// Create at the root bone of the entity, and update to follow
+
 	MAX_PATTACH_TYPES,
 };
 
@@ -60,7 +63,7 @@ class CParticles
 public:
 	inline void DispatchEffect(const char* pName, const CEffectData& data)
 	{
-		S::CTE_DispatchEffect.Call<int>(pName, std::ref(data));
+		S::CTE_DispatchEffect.Call<void>(pName, std::ref(data));
 	}
 
 	inline int GetParticleSystemIndex(const char* pParticleSystemName)
@@ -70,28 +73,21 @@ public:
 
 	inline void DispatchParticleEffect(int iEffectIndex, const Vec3& vecOrigin, const Vec3& vecStart, const Vec3& vecAngles, CBaseEntity* pEntity = nullptr)
 	{
-		CEffectData data = {};
-		data.m_nHitBox = iEffectIndex;
+		CEffectData data;
 		data.m_vOrigin = vecOrigin;
 		data.m_vStart = vecStart;
 		data.m_vAngles = vecAngles;
-		data.m_bCustomColors = true;
-		if (pEntity)
-		{
-			data.m_nEntIndex = pEntity->entindex();
-			data.m_fFlags |= (1 << 0);
-			data.m_nDamageType = 2;
-		}
-		else
-			data.m_nEntIndex = 0;
-
+		data.m_nEntIndex = pEntity ? pEntity->entindex() : 0;
+		data.m_iEffectName = iEffectIndex;
+		
 		DispatchEffect("ParticleEffect", data);
 	}
 
 	inline void DispatchParticleEffect(const char* pszParticleName, const Vec3& vecOrigin, const Vec3& vecAngles, CBaseEntity* pEntity = nullptr)
 	{
-		const int iIndex = GetParticleSystemIndex(pszParticleName);
-		DispatchParticleEffect(iIndex, vecOrigin, vecOrigin, vecAngles, pEntity);
+		int iIndex = GetParticleSystemIndex(pszParticleName);
+		if (iIndex != -1)
+			DispatchParticleEffect(iIndex, vecOrigin, vecOrigin, vecAngles, pEntity);
 	}
 
 	inline void ParticleTracer(const char* pszTracerEffectName, const Vector& vecStart, const Vector& vecEnd, int iEntIndex, int iAttachment, bool bWhiz)

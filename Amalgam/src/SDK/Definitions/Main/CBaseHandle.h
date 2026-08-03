@@ -242,5 +242,3 @@ T* CHandle<T>::operator ->() const
 {
 	return Get();
 }
-
-typedef CBaseHandle EntityHandle_t;

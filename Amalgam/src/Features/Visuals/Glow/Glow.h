@@ -6,12 +6,9 @@
 class CGlow
 {
 private:
-	void Begin();
-	void End();
-	void FirstBegin(IMatRenderContext* pRenderContext);
-	void FirstEnd(IMatRenderContext* pRenderContext);
-	void SecondBegin(IMatRenderContext* pRenderContext, int w, int h);
-	void SecondEnd(Glow_t tGlow, IMatRenderContext* pRenderContext, int w, int h);
+	void SetupBegin(IMatRenderContext* pRenderContext);
+	void SetupMid(IMatRenderContext* pRenderContext, int w, int h);
+	void SetupEnd(Glow_t tGlow, IMatRenderContext* pRenderContext, int w, int h);
 
 	void DrawModel(CBaseEntity* pEntity);
 
@@ -58,11 +55,10 @@ private:
 public:
 
 	void Store(CTFPlayer* pLocal);
-	void RenderFirst();
-	void RenderSecond();
+	void RenderMain();
 	void RenderHandler(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
 
-	void RenderViewmodel(void* rcx, int flags);
+	void RenderViewmodel(void* ecx, int flags);
 	void RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
 
 	void Initialize();

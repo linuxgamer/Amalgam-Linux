@@ -7,41 +7,53 @@ Vec3 CTFPlayer::GetEyeAngles()
 	return { m_angEyeAnglesX(), m_angEyeAnglesY(), 0.f };
 }
 
-Vec3 CTFPlayer::GetViewOffset(bool bScale)
+Vec3 CTFPlayer::GetViewOffset()
 {
-	Vec3 vOffset = GetOffset() / 2;
-
 	if (!IsPlayer())
-		return vOffset;
+		return GetOffset() / 2;
 
-	if (IsDucking())
-		vOffset = { 0.f, 0.f, 45.f };
-	else switch (m_iClass())
+	auto getMainOffset = [this]() -> Vec3
 		{
-		case TF_CLASS_SCOUT: vOffset = { 0.f, 0.f, 65.f }; break;
-		case TF_CLASS_SOLDIER: vOffset = { 0.f, 0.f, 68.f }; break;
-		case TF_CLASS_PYRO: vOffset = { 0.f, 0.f, 68.f }; break;
-		case TF_CLASS_DEMOMAN: vOffset = { 0.f, 0.f, 68.f }; break;
-		case TF_CLASS_HEAVY: vOffset = { 0.f, 0.f, 75.f }; break;
-		case TF_CLASS_ENGINEER: vOffset = { 0.f, 0.f, 68.f }; break;
-		case TF_CLASS_MEDIC: vOffset = { 0.f, 0.f, 75.f }; break;
-		case TF_CLASS_SNIPER: vOffset = { 0.f, 0.f, 75.f }; break;
-		case TF_CLASS_SPY: vOffset = { 0.f, 0.f, 75.f }; break;
-		default: vOffset = m_vecViewOffset().z ? m_vecViewOffset() : Vec3(0.f, 0.f, 72.f);
-		}
+			if (IsDucking())
+				return { 0.f, 0.f, 45.f };
 
-	return bScale ? vOffset * m_flModelScale() : vOffset;
+			switch (m_iClass())
+			{
+			case TF_CLASS_SCOUT: return { 0.f, 0.f, 65.f };
+			case TF_CLASS_SOLDIER: return { 0.f, 0.f, 68.f };
+			case TF_CLASS_PYRO: return { 0.f, 0.f, 68.f };
+			case TF_CLASS_DEMOMAN: return { 0.f, 0.f, 68.f };
+			case TF_CLASS_HEAVY: return { 0.f, 0.f, 75.f };
+			case TF_CLASS_ENGINEER: return { 0.f, 0.f, 68.f };
+			case TF_CLASS_MEDIC: return { 0.f, 0.f, 75.f };
+			case TF_CLASS_SNIPER: return { 0.f, 0.f, 75.f };
+			case TF_CLASS_SPY: return { 0.f, 0.f, 75.f };
+			}
+
+			const Vec3 vOffset = m_vecViewOffset();
+			if (vOffset.z)
+				return vOffset;
+
+			return { 0.f, 0.f, 68.f };
+		};
+
+	return getMainOffset() * m_flModelScale();
 }
 
 bool CTFPlayer::InCond(ETFCond eCond)
 {
 	switch (eCond / 32)
 	{
-	case 0: return m_nPlayerCond() & (1 << eCond) || _condition_bits() & (1 << eCond);
-	case 1: return m_nPlayerCondEx() & (1 << (eCond - 32));
-	case 2: return m_nPlayerCondEx2() & (1 << (eCond - 64));
-	case 3: return m_nPlayerCondEx3() & (1 << (eCond - 96));
-	case 4: return m_nPlayerCondEx4() & (1 << (eCond - 128));
+	case 0:
+		return m_nPlayerCond() & (1 << eCond) || _condition_bits() & (1 << eCond);
+	case 1:
+		return m_nPlayerCondEx() & (1 << (eCond - 32));
+	case 2:
+		return m_nPlayerCondEx2() & (1 << (eCond - 64));
+	case 3:
+		return m_nPlayerCondEx3() & (1 << (eCond - 96));
+	case 4:
+		return m_nPlayerCondEx4() & (1 << (eCond - 128));
 	}
 	return false;
 }
@@ -50,11 +62,16 @@ void CTFPlayer::AddCond(ETFCond eCond)
 {
 	switch (eCond / 32)
 	{
-	case 0: m_nPlayerCond() |= (1 << eCond), _condition_bits() |= (1 << eCond); break;
-	case 1: m_nPlayerCondEx() |= (1 << (eCond - 32)); break;
-	case 2: m_nPlayerCondEx2() |= (1 << (eCond - 64)); break;
-	case 3: m_nPlayerCondEx3() |= (1 << (eCond - 96)); break;
-	case 4: m_nPlayerCondEx4() |= (1 << (eCond - 128)); break;
+	case 0:
+		m_nPlayerCond() |= (1 << eCond), _condition_bits() |= (1 << eCond); break;
+	case 1:
+		m_nPlayerCondEx() |= (1 << (eCond - 32)); break;
+	case 2:
+		m_nPlayerCondEx2() |= (1 << (eCond - 64)); break;
+	case 3:
+		m_nPlayerCondEx3() |= (1 << (eCond - 96)); break;
+	case 4:
+		m_nPlayerCondEx4() |= (1 << (eCond - 128)); break;
 	}
 }
 
@@ -62,11 +79,16 @@ void CTFPlayer::RemoveCond(ETFCond eCond)
 {
 	switch (eCond / 32)
 	{
-	case 0: m_nPlayerCond() &= ~(1 << eCond), _condition_bits() &= ~(1 << eCond); break;
-	case 1: m_nPlayerCondEx() &= ~(1 << (eCond - 32)); break;
-	case 2: m_nPlayerCondEx2() &= ~(1 << (eCond - 64)); break;
-	case 3: m_nPlayerCondEx3() &= ~(1 << (eCond - 96)); break;
-	case 4: m_nPlayerCondEx4() &= ~(1 << (eCond - 128)); break;
+	case 0:
+		m_nPlayerCond() &= ~(1 << eCond), _condition_bits() &= ~(1 << eCond); break;
+	case 1:
+		m_nPlayerCondEx() &= ~(1 << (eCond - 32)); break;
+	case 2:
+		m_nPlayerCondEx2() &= ~(1 << (eCond - 64)); break;
+	case 3:
+		m_nPlayerCondEx3() &= ~(1 << (eCond - 96)); break;
+	case 4:
+		m_nPlayerCondEx4() &= ~(1 << (eCond - 128)); break;
 	}
 }
 
@@ -110,27 +132,16 @@ bool CTFPlayer::IsUbered()
 
 bool CTFPlayer::IsCritBoosted()
 {
-	if (InCond(TF_COND_CRITBOOSTED)
+	return InCond(TF_COND_CRITBOOSTED)
 		|| InCond(TF_COND_CRITBOOSTED_PUMPKIN)
 		|| InCond(TF_COND_CRITBOOSTED_USER_BUFF)
 		|| InCond(TF_COND_CRITBOOSTED_FIRST_BLOOD)
 		|| InCond(TF_COND_CRITBOOSTED_BONUS_TIME)
 		|| InCond(TF_COND_CRITBOOSTED_CTF_CAPTURE)
 		|| InCond(TF_COND_CRITBOOSTED_ON_KILL)
+		|| InCond(TF_COND_CRITBOOSTED_RAGE_BUFF)
 		|| InCond(TF_COND_CRITBOOSTED_CARD_EFFECT)
-		|| InCond(TF_COND_CRITBOOSTED_RUNE_TEMP))
-		return true;
-
-	if (auto pWeapon = m_hActiveWeapon()->As<CTFWeaponBase>())
-	{
-		if (auto pWeaponInfo = pWeapon->m_pWeaponInfo())
-		{
-			if (InCond(TF_COND_CRITBOOSTED_RAGE_BUFF) && pWeaponInfo->m_iWeaponType == TF_WPN_TYPE_PRIMARY)
-				return true;
-		}
-	}
-
-	return false;
+		|| InCond(TF_COND_CRITBOOSTED_RUNE_TEMP);
 }
 
 bool CTFPlayer::IsMiniCritBoosted()

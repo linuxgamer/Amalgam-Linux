@@ -1,7 +1,6 @@
 #include "CritHack.h"
 
 #include "../Ticks/Ticks.h"
-#include "../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
 #define WEAPON_RANDOM_RANGE				10000
 #define TF_DAMAGE_CRIT_MULTIPLIER		3.0f
@@ -297,24 +296,23 @@ void CCritHack::Reset()
 
 
 
-int CCritHack::GetCritRequest(CUserCmd* pCmd, CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
+int CCritHack::GetCritRequest(CUserCmd* pCmd, CTFWeaponBase* pWeapon)
 {
 	bool bCanCrit = m_iAvailableCrits > 0 && !m_bCritBanned;
-
-	bool bForce = bCanCrit && Vars::CritHack::ForceCrits.Value;
-	if (bCanCrit && m_bMelee && Vars::CritHack::AlwaysMeleeCrit.Value
+	bool bPressed = Vars::CritHack::ForceCrits.Value;
+	if (Vars::CritHack::AlwaysMeleeCrit.Value && m_bMelee
 		&& (Vars::Aimbot::General::AutoShoot.Value ? pCmd->buttons & IN_ATTACK && !(G::OriginalCmd.buttons & IN_ATTACK) : Vars::Aimbot::General::AimType.Value)
 		&& G::AimTarget.m_iEntIndex)
 	{
 		auto pEntity = I::ClientEntityList->GetClientEntity(G::AimTarget.m_iEntIndex)->As<CBaseEntity>();
-		if (pEntity && pEntity->IsPlayer() && (SDK::FriendlyFire() || pLocal->m_iTeamNum() != pEntity->m_iTeamNum()))
-			bForce = true;
+		if (pEntity && pEntity->IsPlayer())
+			bPressed = true;
 	}
 	
 	bool bSkip = Vars::CritHack::AvoidRandomCrits.Value;
 	bool bDesync = CommandToSeed(pCmd->command_number) == pWeapon->m_iCurrentSeed();
 
-	return bForce ? CritRequestEnum::Crit : bSkip || bDesync ? CritRequestEnum::Skip : CritRequestEnum::Any;
+	return bCanCrit && bPressed ? CritRequestEnum::Crit : bSkip || bDesync ? CritRequestEnum::Skip : CritRequestEnum::Any;
 }
 
 void CCritHack::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
@@ -357,11 +355,11 @@ void CCritHack::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 	if (!bAttacking || pWeapon->IsRapidFire() && I::GlobalVars->curtime < pWeapon->m_flLastRapidFireCritCheckTime() + 1.f)
 		return;
 
-	int iRequest = GetCritRequest(pCmd, pLocal, pWeapon);
+	int iRequest = GetCritRequest(pCmd, pWeapon);
 	if (iRequest == CritRequestEnum::Any)
 		return;
 
-	if (!F::AntiCheatCompatibility.Active())
+	if (!Vars::Misc::Game::AntiCheatCompatibility.Value)
 	{
 		if (int iCommand = GetCritCommand(pWeapon, pCmd->command_number, iRequest == CritRequestEnum::Crit))
 		{
@@ -382,48 +380,35 @@ void CCritHack::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 
 int CCritHack::PredictCmdNum(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
-	auto fGetCmdNum = [&](int iCommandNumber)
-	{
-		if (!pWeapon || !pLocal->IsAlive() || !I::EngineClient->IsInGame() || F::AntiCheatCompatibility.Active()
-			|| pLocal->IsCritBoosted() || pWeapon->m_flCritTime() > I::GlobalVars->curtime || !WeaponCanCrit(pWeapon))
-			return iCommandNumber;
+	auto getCmdNum = [&](int iCommandNumber)
+		{
+			if (!pWeapon || !pLocal->IsAlive() || !I::EngineClient->IsInGame() || Vars::Misc::Game::AntiCheatCompatibility.Value
+				|| pLocal->IsCritBoosted() || pWeapon->m_flCritTime() > I::GlobalVars->curtime || !WeaponCanCrit(pWeapon))
+				return iCommandNumber;
 
-		UpdateInfo(pLocal, pWeapon);
-		if (pWeapon->IsRapidFire() && I::GlobalVars->curtime < pWeapon->m_flLastRapidFireCritCheckTime() + 1.f)
-			return iCommandNumber;
+			UpdateInfo(pLocal, pWeapon);
+			if (pWeapon->IsRapidFire() && I::GlobalVars->curtime < pWeapon->m_flLastRapidFireCritCheckTime() + 1.f)
+				return iCommandNumber;
 
-		int iRequest = GetCritRequest(pCmd, pLocal, pWeapon);
-		if (iRequest == CritRequestEnum::Any)
-			return iCommandNumber;
+			int iRequest = GetCritRequest(pCmd, pWeapon);
+			if (iRequest == CritRequestEnum::Any)
+				return iCommandNumber;
 
-		if (int iCommand = GetCritCommand(pWeapon, iCommandNumber, iRequest == CritRequestEnum::Crit))
-			return iCommand;
-		return iCommandNumber;
-	};
+			if (int iCommand = GetCritCommand(pWeapon, iCommandNumber, iRequest == CritRequestEnum::Crit))
+				return iCommand;
+			return iCommandNumber;
+		};
 
 	static int iCommandNumber = 0; // cache, don't constantly test
 
 	static int iStaticCommand = 0;
 	if (pCmd->command_number != iStaticCommand)
 	{
-		iCommandNumber = fGetCmdNum(pCmd->command_number);
+		iCommandNumber = getCmdNum(pCmd->command_number);
 		iStaticCommand = pCmd->command_number;
 	}
 
 	return iCommandNumber;
-}
-
-bool CCritHack::ShouldForceEffects(CTFPlayer* pLocal)
-{
-	if (!Vars::CritHack::CritEffects.Value || !pLocal->IsAlive() || pLocal->IsAGhost() || pLocal->IsCritBoosted())
-		return false;
-
-	auto pWeapon = H::Entities.GetWeapon();
-	if (!pWeapon || !WeaponCanCrit(pWeapon))
-		return false;
-
-	float flTickBase = TICKS_TO_TIME(pLocal->m_nTickBase());
-	return Vars::CritHack::ForceCrits.Value && !m_bCritBanned && m_iAvailableCrits > 0 || pWeapon->m_flCritTime() > flTickBase;
 }
 
 void CCritHack::Event(IGameEvent* pEvent, uint32_t uHash, CTFPlayer* pLocal)
@@ -433,7 +418,7 @@ void CCritHack::Event(IGameEvent* pEvent, uint32_t uHash, CTFPlayer* pLocal)
 	case FNV1A::Hash32Const("player_hurt"):
 	{
 		if (!pLocal)
-			return;
+			break;
 
 		int iVictim = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));
 		int iAttacker = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("attacker"));
@@ -457,7 +442,7 @@ void CCritHack::Event(IGameEvent* pEvent, uint32_t uHash, CTFPlayer* pLocal)
 				int iOldHealth = (tHistory.m_mHistory.contains(iHealth) ? tHistory.m_mHistory[iHealth].m_iOldHealth : tHistory.m_iNewHealth) % 32768;
 				if (iHealth > iOldHealth)
 				{
-					for (auto& tOldHealth : tHistory.m_mHistory | std::views::values)
+					for (auto& [_, tOldHealth] : tHistory.m_mHistory)
 					{
 						int iOldHealth2 = tOldHealth.m_iOldHealth % 32768;
 						if (iOldHealth2 > iHealth)
@@ -471,7 +456,7 @@ void CCritHack::Event(IGameEvent* pEvent, uint32_t uHash, CTFPlayer* pLocal)
 			StoreHealthHistory(iVictim, iHealth);
 
 		if (iVictim == iAttacker || iAttacker != I::EngineClient->GetLocalPlayer())
-			return;
+			break;
 
 		if (auto pGameRules = I::TFGameRules())
 		{
@@ -513,33 +498,16 @@ void CCritHack::Event(IGameEvent* pEvent, uint32_t uHash, CTFPlayer* pLocal)
 		else
 			m_iMeleeDamage += iDamage;
 
-		return;
-	}
-	case FNV1A::Hash32Const("player_spawn"):
-	{
-		int iIndex = I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid"));
-
-		if (m_mHealthHistory.contains(iIndex))
-		{
-			auto& tHistory = m_mHealthHistory[iIndex];
-
-			tHistory.m_iSpawnCounter = -1;
-		}
-
-		return;
+		break;
 	}
 	case FNV1A::Hash32Const("scorestats_accumulated_update"):
 	case FNV1A::Hash32Const("mvm_reset_stats"):
-	{
 		m_iRangedDamage = m_iCritDamage = m_iMeleeDamage = 0;
-		return;
-	}
+		break;
 	case FNV1A::Hash32Const("client_beginconnect"):
 	case FNV1A::Hash32Const("client_disconnect"):
 	case FNV1A::Hash32Const("game_newmap"):
-	{
 		Reset();
-	}
 	}
 }
 
@@ -565,7 +533,7 @@ void CCritHack::StoreHealthHistory(int iIndex, int iHealth, CTFPlayer* pPlayer)
 		else if (tHistory.m_iSpawnCounter == -1)
 			tHistory.m_iSpawnCounter = pPlayer->m_iSpawnCounter();
 		else if (tHistory.m_iSpawnCounter != pPlayer->m_iSpawnCounter())
-			return; // wait for spawn
+			return; // wait for event
 	}
 
 	if (!bContains)
@@ -597,8 +565,6 @@ static void* s_pCTFGameStats = nullptr;
 MAKE_HOOK(CTFGameStats_FindPlayerStats, S::CTFGameStats_FindPlayerStats(), void*,
 	void* rcx, CBasePlayer* pPlayer)
 {
-	DEBUG_RETURN(CTFGameStats_FindPlayerStats, rcx, pPlayer);
-
 	s_pCTFGameStats = rcx;
 	return CALL_ORIGINAL(rcx, pPlayer);
 }
@@ -610,7 +576,8 @@ void CCritHack::Draw(CTFPlayer* pLocal)
 		return;
 
 	auto pWeapon = H::Entities.GetWeapon();
-	if (!pWeapon || !pLocal->IsAlive() || pLocal->IsAGhost() || !WeaponCanCrit(pWeapon, true))
+	if (!pWeapon || !pLocal->IsAlive() || pLocal->IsAGhost()
+		|| !WeaponCanCrit(pWeapon, true))
 		return;
 
 
@@ -643,7 +610,7 @@ void CCritHack::Draw(CTFPlayer* pLocal)
 
 	float flTickBase = TICKS_TO_TIME(pLocal->m_nTickBase());
 
-	if (F::AntiCheatCompatibility.Active())
+	if (Vars::Misc::Game::AntiCheatCompatibility.Value)
 		H::Draw.StringOutlined(fFont, x, y += nTall, Vars::Colors::IndicatorTextBad.Value, Vars::Menu::Theme::Background.Value, align, "Anticheat compatibility");
 
 	if (pLocal->IsCritBoosted())

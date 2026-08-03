@@ -3,7 +3,10 @@
 MAKE_HOOK(IPanel_PaintTraverse, U::Memory.GetVirtual(I::Panel, 41), void,
 	void* rcx, VPANEL vguiPanel, bool forceRepaint, bool allowForce)
 {
-	DEBUG_RETURN(IPanel_PaintTraverse, rcx, vguiPanel, forceRepaint, allowForce);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::IPanel_PaintTraverse[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, vguiPanel, forceRepaint, allowForce);
+#endif
 
 	if (!Vars::Visuals::UI::StreamerMode.Value)
 		return CALL_ORIGINAL(rcx, vguiPanel, forceRepaint, allowForce);

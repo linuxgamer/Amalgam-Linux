@@ -6,19 +6,30 @@
 #include "../../Simulation/MovementSimulation/MovementSimulation.h"
 #include "../../Simulation/ProjectileSimulation/ProjectileSimulation.h"
 
+MAKE_SIGNATURE(CTFPlayerSharedUtils_GetEconItemViewByLoadoutSlot, "client.dll", "48 89 6C 24 ? 56 41 54 41 55 41 56 41 57 48 83 EC", 0x0);
+MAKE_SIGNATURE(CEconItemView_GetItemName, "client.dll", "40 53 48 83 EC ? 48 8B D9 C6 81 ? ? ? ? ? E8 ? ? ? ? 48 8B 8B", 0x0);
+
 static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* pGroup, std::unordered_map<CBaseEntity*, PlayerCache_t>& mCache)
 {
 	int iIndex = pPlayer->entindex();
+	auto pResource = H::Entities.GetResource();
 
-	if (int iObserverMode = pLocal->m_iObserverMode(); iObserverMode == OBS_MODE_FIRSTPERSON || iObserverMode == OBS_MODE_THIRDPERSON
-		? iObserverMode == OBS_MODE_FIRSTPERSON && pLocal->m_hObserverTarget().GetEntryIndex() == iIndex
-		: !I::Input->CAM_IsThirdPerson() && iIndex == I::EngineClient->GetLocalPlayer())
+	int iObserverTarget = pLocal->m_hObserverTarget().GetEntryIndex();
+	int iObserverMode = pLocal->m_iObserverMode();
+	if (F::Spectate.m_iTarget != -1)
+	{
+		iObserverTarget = F::Spectate.m_hTargetTarget.GetEntryIndex();
+		iObserverMode = F::Spectate.m_iTargetMode;
+	}
+	bool bSpectate = iObserverMode == OBS_MODE_FIRSTPERSON || iObserverMode == OBS_MODE_THIRDPERSON;
+
+	bool bLocal = iIndex == I::EngineClient->GetLocalPlayer();
+	bool bTarget = bSpectate && iObserverTarget == iIndex;
+	if (!bSpectate ? !I::Input->CAM_IsThirdPerson() && bLocal : iObserverMode == OBS_MODE_FIRSTPERSON && bTarget)
 		return;
 
-	auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
-	auto pResource = H::Entities.GetResource();
-	bool bLocal = pPlayer->entindex() == I::EngineClient->GetLocalPlayer();
 	int iClassNum = pPlayer->m_iClass();
+	auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
 
 	PlayerCache_t& tCache = mCache[pPlayer];
 	tCache.m_flAlpha = pGroup->m_tColor.a / 255.f;
@@ -83,13 +94,13 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 				if (!vTags.empty())
 				{
 					std::sort(vTags.begin(), vTags.end(), [&](const auto a, const auto b) -> bool
-					{
-						// sort by priority if unequal
-						if (std::get<2>(a) != std::get<2>(b))
-							return std::get<2>(a) > std::get<2>(b);
+						{
+							// sort by priority if unequal
+							if (std::get<2>(a) != std::get<2>(b))
+								return std::get<2>(a) > std::get<2>(b);
 
-						return std::get<0>(a) < std::get<0>(b);
-					});
+							return std::get<0>(a) < std::get<0>(b);
+						});
 
 					for (auto& [sName, tColor, _] : vTags)
 						tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, sName, tColor, tColor.IsColorDark() ? Color_t(255, 255, 255) : Color_t(0, 0, 0));
@@ -104,7 +115,7 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 		tCache.m_flHealth = flHealth > flMaxHealth
 			? 1.f + std::clamp((flHealth - flMaxHealth) / (floorf(flMaxHealth / 10.f) * 5), 0.f, 1.f)
 			: std::clamp(flHealth / flMaxHealth, 0.f, 1.f);
-		Color_t tColor = Vars::Colors::IndicatorBad.Value.Lerp(Vars::Colors::IndicatorGood.Value, std::clamp(tCache.m_flHealth, 0.f, 1.f), LerpEnum::HSV);
+		Color_t tColor = Vars::Colors::IndicatorBad.Value.Lerp(Vars::Colors::IndicatorGood.Value, std::clamp(tCache.m_flHealth, 0.f, 1.f));
 		tCache.m_vBars.emplace_back(ALIGN_LEFT, tCache.m_flHealth, tColor, Vars::Colors::IndicatorMisc.Value);
 	}
 	if (pGroup->m_iESP & ESPEnum::HealthText)
@@ -131,7 +142,11 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 	if (pGroup->m_iESP & ESPEnum::WeaponIcon && pWeapon)
 		tCache.m_pWeaponIcon = pWeapon->GetWeaponIcon();
 	if (pGroup->m_iESP & ESPEnum::WeaponText && pWeapon)
-		tCache.m_vText.emplace_back(ALIGN_BOTTOM, SDK::ConvertWideToUTF8(pWeapon->GetWeaponName()), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+	{
+		auto pAttributeManager = U::Memory.CallVirtual<1, void*>(uintptr_t(pWeapon) + 3096);
+		auto pCurItemData = reinterpret_cast<void*>(uintptr_t(pAttributeManager) + 144);
+		tCache.m_vText.emplace_back(ALIGN_BOTTOM, SDK::ConvertWideToUTF8(S::CEconItemView_GetItemName.Call<const wchar_t*>(pCurItemData)), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+	}
 
 	if (pGroup->m_iESP & ESPEnum::LagCompensation && !pPlayer->IsDormant() && !bLocal)
 	{
@@ -329,16 +344,16 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 				}
 				else
 				{
-					auto fGetSniperDot = [](CBaseEntity* pEntity) -> CSniperDot*
-					{
-						for (auto pDot : H::Entities.GetGroup(EntityEnum::SniperDots))
+					auto GetSniperDot = [](CBaseEntity* pEntity) -> CSniperDot*
 						{
-							if (pDot->m_hOwnerEntity().Get() == pEntity)
-								return pDot->As<CSniperDot>();
-						}
-						return nullptr;
-					};
-					if (CSniperDot* pPlayerDot = fGetSniperDot(pPlayer))
+							for (auto pDot : H::Entities.GetGroup(EntityEnum::SniperDots))
+							{
+								if (pDot->m_hOwnerEntity().Get() == pEntity)
+									return pDot->As<CSniperDot>();
+							}
+							return nullptr;
+						};
+					if (CSniperDot* pPlayerDot = GetSniperDot(pPlayer))
 					{
 						float flChargeTime = std::max(SDK::AttribHookValue(3.f, "mult_sniper_charge_per_sec", pWeapon), 1.5f);
 						tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, std::format("Charging {:.0f}%", Math::RemapVal(TICKS_TO_TIME(I::ClientState->m_ClockDriftMgr.m_nServerTick) - pPlayerDot->m_flChargeStartTime() - 0.3f, 0.f, flChargeTime, 0.f, 100.f)), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
@@ -367,7 +382,7 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 		if (Vars::Visuals::Removals::Taunts.Value && pPlayer->InCond(TF_COND_TAUNTING))
 			tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, "Taunt", Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
 
-		if (Vars::Debug::Info.Value && !bLocal /*&& !pPlayer->IsDormant()*/)
+		if (Vars::Debug::Info.Value && !pPlayer->IsDormant() && !bLocal)
 		{
 			int iAverage = TIME_TO_TICKS(F::MoveSim.GetPredictedDelta(pPlayer));
 			int iCurrent = H::Entities.GetChoke(iIndex);
@@ -410,7 +425,7 @@ static inline void StoreBuilding(CBaseObject* pBuilding, CTFPlayer* pLocal, Grou
 	if (pGroup->m_iESP & ESPEnum::HealthBar)
 	{
 		tCache.m_flHealth = std::clamp(flHealth / flMaxHealth, 0.f, 1.f);
-		Color_t tColor = Vars::Colors::IndicatorBad.Value.Lerp(Vars::Colors::IndicatorGood.Value, std::clamp(tCache.m_flHealth, 0.f, 1.f), LerpEnum::HSV);
+		Color_t tColor = Vars::Colors::IndicatorBad.Value.Lerp(Vars::Colors::IndicatorGood.Value, std::clamp(tCache.m_flHealth, 0.f, 1.f));
 		tCache.m_vBars.emplace_back(ALIGN_LEFT, tCache.m_flHealth, tColor, Vars::Colors::IndicatorMisc.Value);
 	}
 	if (pGroup->m_iESP & ESPEnum::HealthText)
@@ -474,7 +489,7 @@ static inline const char* GetProjectileName(CBaseEntity* pProjectile)
 	case ETFClassID::CTFProjectile_ThrowableBreadMonster: sReturn = "Milk"; break;
 	case ETFClassID::CTFProjectile_SpellBats:
 	case ETFClassID::CTFProjectile_SpellKartBats: sReturn = "Bats"; break;
-	case ETFClassID::CTFProjectile_SpellMeteorShower: sReturn = "Meteors"; break;
+	case ETFClassID::CTFProjectile_SpellMeteorShower: sReturn = "Meteor shower"; break;
 	case ETFClassID::CTFProjectile_SpellMirv:
 	case ETFClassID::CTFProjectile_SpellPumpkin: sReturn = "Pumpkin"; break;
 	case ETFClassID::CTFProjectile_SpellSpawnBoss: sReturn = "Monoculus"; break;
@@ -661,7 +676,7 @@ static inline void StoreMisc(CBaseEntity* pEntity, CTFPlayer* pLocal, Group_t* p
 		const char* sName = "Unknown";
 		switch (pEntity->GetClassID())
 		{
-		case ETFClassID::CTFBaseBoss: sName = "NPC"; break;
+		case ETFClassID::CTFBaseBoss: sName = "Boss"; break;
 		case ETFClassID::CTFTankBoss: sName = "Tank"; break;
 		case ETFClassID::CMerasmus: sName = "Merasmus"; break;
 		case ETFClassID::CEyeballBoss: sName = "Monoculus"; break;
@@ -735,13 +750,8 @@ void CESP::Store(CTFPlayer* pLocal)
 	}
 }
 
-static matrix3x4 s_aBones[MAXSTUDIOBONES];
-static matrix3x4 s_mTransform = {};
-
 void CESP::Draw()
 {
-	Math::AngleMatrix({ 0.f, I::EngineClient->GetViewAngles().y, 0.f }, s_mTransform, false);
-
 	DrawWorld();
 	DrawBuildings();
 	DrawPlayers();
@@ -771,7 +781,8 @@ void CESP::DrawPlayers()
 		if (tCache.m_bBones)
 		{
 			auto pPlayer = pEntity->As<CTFPlayer>();
-			if (pPlayer->SetupBones(s_aBones, MAXSTUDIOBONES, BONE_USED_BY_ANYTHING, I::GlobalVars->curtime))
+			matrix3x4 aBones[MAXSTUDIOBONES];
+			if (pPlayer->SetupBones(aBones, MAXSTUDIOBONES, BONE_USED_BY_ANYTHING, I::GlobalVars->curtime))
 			{
 				int iHead = pPlayer->GetBaseToHitbox(HITBOX_HEAD);
 				int iSpine2 = pPlayer->GetBaseToHitbox(HITBOX_SPINE2);
@@ -789,37 +800,37 @@ void CESP::DrawPlayers()
 				int iRightCalf = pPlayer->GetBaseToHitbox(HITBOX_RIGHT_CALF);
 				int iRightFoot = pPlayer->GetBaseToHitbox(HITBOX_RIGHT_FOOT);
 
-				DrawBones(pPlayer, s_aBones, { iHead, iSpine2, iPelvis }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iSpine2, iLeftUpperarm, iLeftForearm, iLeftHand }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iSpine2, iRightUpperarm, iRightForearm, iRightHand }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iPelvis, iLeftThigh, iLeftCalf, iLeftFoot }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iPelvis, iRightThigh, iRightCalf, iRightFoot }, tCache.m_tColor);
+				DrawBones(pPlayer, aBones, { iHead, iSpine2, iPelvis }, tCache.m_tColor);
+				DrawBones(pPlayer, aBones, { iSpine2, iLeftUpperarm, iLeftForearm, iLeftHand }, tCache.m_tColor);
+				DrawBones(pPlayer, aBones, { iSpine2, iRightUpperarm, iRightForearm, iRightHand }, tCache.m_tColor);
+				DrawBones(pPlayer, aBones, { iPelvis, iLeftThigh, iLeftCalf, iLeftFoot }, tCache.m_tColor);
+				DrawBones(pPlayer, aBones, { iPelvis, iRightThigh, iRightCalf, iRightFoot }, tCache.m_tColor);
 			}
 		}
 
 		for (auto& [iMode, flPercent, tColor, tOverfill, bAdjust] : tCache.m_vBars)
 		{
-			auto fDrawBar = [&](int x, int y, int w, int h, EAlign eAlign = ALIGN_LEFT)
-			{
-				if (flPercent > 1.f)
+			auto drawBar = [&](int x, int y, int w, int h, EAlign eAlign = ALIGN_LEFT)
 				{
-					H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-					H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdjust);
-				}
-				else
-					H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-			};
+					if (flPercent > 1.f)
+					{
+						H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
+						H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdjust);
+					}
+					else
+						H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
+				};
 
 			int iSpace = H::Draw.Scale(4);
 			int iThickness = H::Draw.Scale(2, Scale_Round);
 			switch (iMode)
 			{
 			case ALIGN_LEFT:
-				fDrawBar(x - iSpace - iThickness - lOffset, y, iThickness, h, ALIGN_BOTTOM);
+				drawBar(x - iSpace - iThickness - lOffset, y, iThickness, h, ALIGN_BOTTOM);
 				lOffset += iSpace + iThickness;
 				break;
 			case ALIGN_BOTTOM:
-				fDrawBar(x, y + h + iSpace + bOffset, w, iThickness);
+				drawBar(x, y + h + iSpace + bOffset, w, iThickness);
 				bOffset += iSpace + iThickness;
 				break;
 			}
@@ -902,27 +913,27 @@ void CESP::DrawBuildings()
 			H::Draw.LineRectOutline(x, y, w, h, tCache.m_tColor, { 0, 0, 0, 255 });
 		for (auto& [iMode, flPercent, tColor, tOverfill, bAdjust] : tCache.m_vBars)
 		{
-			auto fDrawBar = [&](int x, int y, int w, int h, EAlign eAlign = ALIGN_LEFT)
-			{
-				if (flPercent > 1.f)
+			auto drawBar = [&](int x, int y, int w, int h, EAlign eAlign = ALIGN_LEFT)
 				{
-					H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-					H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdjust);
-				}
-				else
-					H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-			};
+					if (flPercent > 1.f)
+					{
+						H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
+						H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdjust);
+					}
+					else
+						H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
+				};
 
 			int iSpace = H::Draw.Scale(4);
 			int iThickness = H::Draw.Scale(2, Scale_Round);
 			switch (iMode)
 			{
 			case ALIGN_LEFT:
-				fDrawBar(x - iSpace - iThickness - lOffset, y, iThickness, h, ALIGN_BOTTOM);
+				drawBar(x - iSpace - iThickness - lOffset, y, iThickness, h, ALIGN_BOTTOM);
 				lOffset += iSpace + iThickness;
 				break;
 			case ALIGN_BOTTOM:
-				fDrawBar(x, y + h + iSpace + bOffset, w, iThickness);
+				drawBar(x, y + h + iSpace + bOffset, w, iThickness);
 				bOffset += iSpace + iThickness;
 				break;
 			}
@@ -1004,10 +1015,13 @@ void CESP::DrawWorld()
 
 bool CESP::GetDrawBounds(CBaseEntity* pEntity, float& x, float& y, float& w, float& h)
 {
-	Math::MatrixInitialize(s_mTransform, pEntity->GetAbsOrigin(), false);
+	Vec3 vOrigin = pEntity->GetAbsOrigin();
+	matrix3x4 mTransform = { { 1, 0, 0, vOrigin.x }, { 0, 1, 0, vOrigin.y }, { 0, 0, 1, vOrigin.z } };
+	//if (pEntity->entindex() == I::EngineClient->GetLocalPlayer())
+		Math::AngleMatrix({ 0.f, I::EngineClient->GetViewAngles().y, 0.f }, mTransform, false);
 
 	float flLeft, flRight, flTop, flBottom;
-	if (!SDK::IsOnScreen(pEntity, s_mTransform, &flLeft, &flRight, &flTop, &flBottom, true))
+	if (!SDK::IsOnScreen(pEntity, mTransform, &flLeft, &flRight, &flTop, &flBottom, true))
 		return false;
 
 	x = flLeft;
@@ -1028,15 +1042,15 @@ bool CESP::GetDrawBounds(CBaseEntity* pEntity, float& x, float& y, float& w, flo
 	return !(x > H::Draw.m_nScreenW || x + w < 0 || y > H::Draw.m_nScreenH || y + h < 0);
 }
 
-void CESP::DrawBones(CTFPlayer* pPlayer, matrix3x4* aBones, std::vector<int> vBones, Color_t tColor)
+void CESP::DrawBones(CTFPlayer* pPlayer, matrix3x4* aBones, std::vector<int> vecBones, Color_t clr)
 {
-	for (size_t n = 1; n < vBones.size(); n++)
+	for (size_t n = 1; n < vecBones.size(); n++)
 	{
-		auto vBone1 = pPlayer->GetHitboxCenter(aBones, vBones[n]);
-		auto vBone2 = pPlayer->GetHitboxCenter(aBones, vBones[n - 1]);
+		auto vBone1 = pPlayer->GetHitboxCenter(aBones, vecBones[n]);
+		auto vBone2 = pPlayer->GetHitboxCenter(aBones, vecBones[n - 1]);
 
 		Vec3 vScreen1, vScreen2;
 		if (SDK::W2S(vBone1, vScreen1) && SDK::W2S(vBone2, vScreen2))
-			H::Draw.Line(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, tColor);
+			H::Draw.Line(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, clr);
 	}
 }

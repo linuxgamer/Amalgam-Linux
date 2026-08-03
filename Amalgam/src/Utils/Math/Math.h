@@ -1,18 +1,89 @@
 #pragma once
-#include "BaseMath.h"
+
 #include "../../SDK/Definitions/Types.h"
-#include "../Hash/FNV1A.h"
+
+#include <cmath>
+#include <cfloat>
+#include <algorithm>
+#include <array>
 
 #undef min
 #undef max
 
-#define FLT_COMPARE(x, y) (fabsf(x - y) <= FLT_EPSILON * fmaxf(1.f, fmaxf(fabsf(x), fabsf(y))))
+#pragma warning (push)
+#pragma warning (disable : 26451)
+#pragma warning (disable : 4244)
 
-#define DIST_EPSILON 0.03125f
-#define CALC_EPSILON 0.001f
+#define floatCompare(x, y) (fabsf(x - y) <= FLT_EPSILON * fmaxf(1.f, fmaxf(fabsf(x), fabsf(y))))
 
 namespace Math
 {
+	inline float Lerp(float a, float b, float t)
+	{
+		return a + (b - a) * t;
+	}
+
+	inline float SimpleSpline(float val)
+	{
+		float flSquared = powf(val, 2);
+		return 3 * flSquared - 2 * flSquared * val;
+	}
+
+	inline float RemapVal(float flVal, float a, float b, float c, float d, bool bClamp = true)
+	{
+		if (a == b)
+			return flVal >= b ? d : c;
+
+		float t = (flVal - a) / (b - a);
+		if (bClamp)
+			t = std::clamp(t, 0.f, 1.f);
+
+		return Lerp(c, d, t);
+	}
+
+	inline float SimpleSplineRemapVal(float flVal, float a, float b, float c, float d, bool bClamp = true)
+	{
+		if (a == b)
+			return flVal >= b ? d : c;
+
+		float t = (flVal - a) / (b - a);
+		if (bClamp)
+			t = std::clamp(t, 0.f, 1.f);
+
+		return Lerp(c, d, SimpleSpline(t));
+	}
+
+	inline double FastSqrt(double n)
+	{
+		return std::sqrt(n);
+	}
+
+	inline void SinCos(float flRadians, float* pSin, float* pCos)
+	{
+		*pSin = std::sin(flRadians);
+		*pCos = std::cos(flRadians);
+	}
+
+	inline float NormalizeAngle(float flAngle, float flRange = 360.f)
+	{
+		return std::isfinite(flAngle) ? std::remainder(flAngle, flRange) : 0.f;
+	}
+
+	inline float NormalizeRad(float flAngle, float flRange = PI * 2)
+	{
+		return std::isfinite(flAngle) ? std::remainder(flAngle, flRange) : 0.f;
+	}
+
+	inline float ClampNormalizeAngle(float flAngle, float flRange = 180.f)
+	{
+		return std::isfinite(flAngle) ? (flAngle > flRange ? -flRange : flAngle < -flRange ? flRange : flAngle) : 0.f;
+	}
+
+	inline float ClampNormalizeRad(float flAngle, float flRange = PI)
+	{
+		return std::isfinite(flAngle) ? (flAngle > flRange ? -flRange : flAngle < -flRange ? flRange : flAngle) : 0.f;
+	}
+
 	inline void ClampAngles(Vec3& v)
 	{
 		v.x = std::clamp(NormalizeAngle(v.x), -89.f, 89.f);
@@ -26,34 +97,28 @@ namespace Math
 		v.y = NormalizeAngle(v.y);
 	}
 
-	inline bool IsBoxIntersectingBox(const Vec3& vMins1, const Vec3& vMaxs1, const Vec3& vMins2, const Vec3& vMaxs2)
-	{
-		if (vMins1.x > vMaxs2.x || vMaxs1.x < vMins2.x)
-			return false;
-		if (vMins1.y > vMaxs2.y || vMaxs1.y < vMins2.y)
-			return false;
-		if (vMins1.z > vMaxs2.z || vMaxs1.z < vMins2.z)
-			return false;
-		return true;
-	}
-
-	inline bool IsPointIntersectingBox(const Vec3& vPoint, const Vec3& vMins, const Vec3& vMaxs)
-	{
-		return IsBoxIntersectingBox(vPoint, vPoint, vMins, vMaxs);
-	}
-
 	inline void VectorAngles(const Vec3& vForward, Vec3& vAngles)
 	{
-		if (vForward.x || vForward.y)
+		float flYaw, flPitch;
+
+		if (vForward.y == 0 && vForward.x == 0)
 		{
-			vAngles.x = Rad2Deg(atan2f(-vForward.z, vForward.Length2D()));
-			vAngles.y = Rad2Deg(atan2f(vForward.y, vForward.x));
+			flYaw = 0;
+			flPitch = vForward.z > 0 ? 270 : 90;
 		}
 		else
 		{
-			vAngles.x = vForward.z > 0 ? 270 : 90;
-			vAngles.y = 0;
+			flYaw = RAD2DEG(atan2f(vForward.y, vForward.x));
+			if (flYaw < 0)
+				flYaw += 360;
+
+			flPitch = RAD2DEG(atan2f(-vForward.z, vForward.Length2D()));
+			if (flPitch < 0)
+				flPitch += 360;
 		}
+
+		vAngles.x = flPitch;
+		vAngles.y = flYaw;
 		vAngles.z = 0;
 	}
 
@@ -66,9 +131,9 @@ namespace Math
 
 	inline void AngleVectors(const Vec3& vAngles, Vec3* pForward = nullptr, Vec3* pRight = nullptr, Vec3* pUp = nullptr)
 	{
-		float sp, sy, cp, cy;
-		SinCos(Deg2Rad(vAngles.x), sp, cp);
-		SinCos(Deg2Rad(vAngles.y), sy, cy);
+		float sp, sy, sr, cp, cy, cr;
+		SinCos(DEG2RAD(vAngles.x), &sp, &cp);
+		SinCos(DEG2RAD(vAngles.y), &sy, &cy);
 
 		if (pForward)
 		{
@@ -79,20 +144,19 @@ namespace Math
 
 		if (pRight || pUp)
 		{
-			float sr, cr;
-			SinCos(Deg2Rad(vAngles.z), sr, cr);
+			SinCos(DEG2RAD(vAngles.z), &sr, &cr);
 
 			if (pRight)
 			{
-				pRight->x = -1 * sr * sp * cy + -1 * cr * -sy;
-				pRight->y = -1 * sr * sp * sy + -1 * cr * cy;
+				pRight->x = (-1 * sr * sp * cy + -1 * cr * -sy);
+				pRight->y = (-1 * sr * sp * sy + -1 * cr * cy);
 				pRight->z = -1 * sr * cp;
 			}
 
 			if (pUp)
 			{
-				pUp->x = cr * sp * cy + -sr * -sy;
-				pUp->y = cr * sp * sy + -sr * cy;
+				pUp->x = (cr * sp * cy + -sr * -sy);
+				pUp->y = (cr * sp * sy + -sr * cy);
 				pUp->z = cr * cp;
 			}
 		}
@@ -101,11 +165,11 @@ namespace Math
 	inline Vec3 CalcAngle(const Vec3& vFrom, const Vec3& vTo, bool bClamp = true)
 	{
 		Vec3 vDelta = vFrom - vTo;
-		float flHyp = std::sqrtf(vDelta.x * vDelta.x + vDelta.y * vDelta.y);
+		float flHyp = std::sqrtf((vDelta.x * vDelta.x) + (vDelta.y * vDelta.y));
 
 		Vec3 vAngles = {
-			atanf(vDelta.z / flHyp) * RAD,
-			atanf(vDelta.y / vDelta.x) * RAD,
+			atanf(vDelta.z / flHyp) * float(M_RADPI),
+			atanf(vDelta.y / vDelta.x) * float(M_RADPI),
 			0.f
 		};
 
@@ -126,21 +190,21 @@ namespace Math
 		Vec3 vToForward = Vec3();
 		AngleVectors(vToAng, &vToForward);
 
-		float flResult = Rad2Deg(acos(vFromForward.Dot(vToForward)));
-		if (!isfinite(flResult))
+		float flResult = RAD2DEG(acos(vFromForward.Dot(vToForward)));
+		if (!isfinite(flResult) || isinf(flResult) || isnan(flResult))
 			flResult = 0.f;
 
 		return flResult;
 	}
 
-	inline Vec3 RotatePoint(const Vec3& vPoint, const Vec3& vOrigin, const Vec3& vAngles)
+	inline Vec3 RotatePoint(Vec3 vPoint, Vec3 vOrigin, Vec3 vAngles)
 	{
-		Vec3 vOffset = vPoint - vOrigin;
+		vPoint -= vOrigin;
 
 		float sp, sy, sr, cp, cy, cr;
-		SinCos(Deg2Rad(vAngles.x), sp, cp);
-		SinCos(Deg2Rad(vAngles.y), sy, cy);
-		SinCos(Deg2Rad(vAngles.z), sr, cr);
+		SinCos(DEG2RAD(vAngles.x), &sp, &cp);
+		SinCos(DEG2RAD(vAngles.y), &sy, &cy);
+		SinCos(DEG2RAD(vAngles.z), &sr, &cr);
 
 		Vec3 vX = {
 			cy * cp,
@@ -158,61 +222,13 @@ namespace Math
 			cp * cr
 		};
 
-		return Vec3(vX.Dot(vOffset), vY.Dot(vOffset), vZ.Dot(vOffset)) + vOrigin;
-	}
-	
-	inline float AABBLine(Vec3 vMins, Vec3 vMaxs, Vec3 vStart, Vec3 vDir)
-	{
-		Vec3 a = {
-			(vMins.x - vStart.x) / vDir.x,
-			(vMins.y - vStart.y) / vDir.y,
-			(vMins.z - vStart.z) / vDir.z
-		};
-		Vec3 b = {
-			(vMaxs.x - vStart.x) / vDir.x,
-			(vMaxs.y - vStart.y) / vDir.y,
-			(vMaxs.z - vStart.z) / vDir.z
-		};
-		Vec3 c = {
-			std::min(a.x, b.x),
-			std::min(a.y, b.y),
-			std::min(a.z, b.z)
-		};
-		return std::max(std::max(c.x, c.y), c.z);
-	}
-
-	inline Vec3 PullPoint(Vec3 vFrom, Vec3 vTo, Vec3 vOrigin, Vec3 vMins, Vec3 vMaxs)
-	{
-		return vTo.Lerp(vFrom, fabsf(AABBLine(vOrigin + vMins, vOrigin + vMaxs, vTo, vFrom - vTo)));
+		return Vec3(vX.Dot(vPoint), vY.Dot(vPoint), vZ.Dot(vPoint)) + vOrigin;
 	}
 
 	inline void VectorTransform(const Vec3& vIn, const matrix3x4& mMatrix, Vec3& vOut)
 	{
 		for (auto i = 0; i < 3; i++)
 			vOut[i] = vIn.Dot(mMatrix[i]) + mMatrix[i][3];
-	}
-
-	inline Vec3 VectorTransform(const Vec3& vIn, const matrix3x4& mMatrix)
-	{
-		Vec3 vOut;
-		VectorTransform(vIn, mMatrix, vOut);
-		return vOut;
-	}
-
-	inline void VectorITransform(const Vec3& vIn, const matrix3x4& mMatrix, Vec3& vOut)
-	{
-		Vec3 vMatrixT;
-		for (auto i = 0; i < 3; i++)
-			vMatrixT[i] = vIn[i] - mMatrix[i][3];
-		for (auto i = 0; i < 3; i++)
-			vOut[i] = vMatrixT[0] * mMatrix[0][i] + vMatrixT[1] * mMatrix[1][i] + vMatrixT[2] * mMatrix[2][i];
-	}
-
-	inline Vec3 VectorITransform(const Vec3& vIn, const matrix3x4& mMatrix)
-	{
-		Vec3 vOut;
-		VectorITransform(vIn, mMatrix, vOut);
-		return vOut;
 	}
 
 	inline void MatrixSetColumn(const Vec3& vIn, int iColumn, matrix3x4& mOut)
@@ -225,9 +241,9 @@ namespace Math
 	inline void AngleMatrix(const Vec3& vAngles, matrix3x4& mMatrix, bool bClearOrigin = true)
 	{
 		float sp, sy, sr, cp, cy, cr;
-		SinCos(Deg2Rad(vAngles.x), sp, cp);
-		SinCos(Deg2Rad(vAngles.y), sy, cy);
-		SinCos(Deg2Rad(vAngles.z), sr, cr);
+		SinCos(DEG2RAD(vAngles.x), &sp, &cp);
+		SinCos(DEG2RAD(vAngles.y), &sy, &cy);
+		SinCos(DEG2RAD(vAngles.z), &sr, &cr);
 
 		mMatrix[0][0] = cp * cy;
 		mMatrix[1][0] = cp * sy;
@@ -263,23 +279,16 @@ namespace Math
 		float flLen = vForward.Length2D();
 		if (flLen > 0.001f)
 		{
-			vAngles.x = Rad2Deg(std::atan2(-vForward.z, flLen));
-			vAngles.y = Rad2Deg(std::atan2(vForward.y, vForward.x));
-			vAngles.z = Rad2Deg(std::atan2(vLeft.z, vUp.z));
+			vAngles.x = RAD2DEG(std::atan2(-vForward.z, flLen));
+			vAngles.y = RAD2DEG(std::atan2(vForward.y, vForward.x));
+			vAngles.z = RAD2DEG(std::atan2(vLeft.z, vUp.z));
 		}
 		else
 		{
-			vAngles.x = Rad2Deg(std::atan2(-vForward.z, flLen));
-			vAngles.y = Rad2Deg(std::atan2(-vLeft.x, vLeft.y));
+			vAngles.x = RAD2DEG(std::atan2(-vForward.z, flLen));
+			vAngles.y = RAD2DEG(std::atan2(-vLeft.x, vLeft.y));
 			vAngles.z = 0;
 		}
-	}
-
-	inline Vec3 MatrixAngles(const matrix3x4& mMatrix)
-	{
-		Vec3 vOut;
-		MatrixAngles(mMatrix, vOut);
-		return vOut;
 	}
 
 	inline bool RayToOBB(const Vec3& vOrigin, const Vec3& vDirection, const Vec3& vMins, const Vec3& vMaxs, const matrix3x4& mMatrix, float flScale = 1.f)
@@ -302,7 +311,7 @@ namespace Math
 
 		for (int i = 0; i < 3; ++i)
 		{
-			if (FLT_COMPARE(f[i], 0.f))
+			if (floatCompare(f[i], 0.f))
 			{
 				if (-e[i] + vMins[i] * flScale > 0.f || -e[i] + vMaxs[i] * flScale < 0.f)
 					return false;
@@ -323,39 +332,11 @@ namespace Math
 		return true;
 	}
 
-	inline void VectorRotate(const Vec3& vIn, const matrix3x4& mMatrix, Vec3& vOut)
+	inline void VectorRotate(Vec3& vIn, const matrix3x4& mIn, Vec3& vOut)
 	{
-		vOut.x = vIn.Dot(mMatrix[0]);
-		vOut.y = vIn.Dot(mMatrix[1]);
-		vOut.z = vIn.Dot(mMatrix[2]);
-	}
-
-	inline Vec3 VectorRotate(const Vec3& vIn, const matrix3x4& mMatrix)
-	{
-		Vec3 vOut;
-		VectorRotate(vIn, mMatrix, vOut);
-		return vOut;
-	}
-
-	inline void MatrixInitialize(matrix3x4& mMatrix, const Vec3& vOrigin, const Vec3& vXAxis, const Vec3& vYAxis, const Vec3& vZAxis)
-	{
-		mMatrix[0][0] = vXAxis.x, mMatrix[0][1] = vYAxis.x, mMatrix[0][2] = vZAxis.x, mMatrix[0][3] = vOrigin.x;
-		mMatrix[1][0] = vXAxis.y, mMatrix[1][1] = vYAxis.y, mMatrix[1][2] = vZAxis.y, mMatrix[1][3] = vOrigin.y;
-		mMatrix[2][0] = vXAxis.z, mMatrix[2][1] = vYAxis.z, mMatrix[2][2] = vZAxis.z, mMatrix[2][3] = vOrigin.z;
-	}
-
-	inline void MatrixInitialize(matrix3x4& mMatrix, const Vec3& vOrigin = {}, bool bAxes = true)
-	{
-		if (bAxes)
-		{
-			mMatrix[0][0] = 1, mMatrix[0][1] = 0, mMatrix[0][2] = 0;
-			mMatrix[1][0] = 0, mMatrix[1][1] = 1, mMatrix[1][2] = 0;
-			mMatrix[2][0] = 0, mMatrix[2][1] = 0, mMatrix[2][2] = 1;
-		}
-
-		mMatrix[0][3] = vOrigin.x;
-		mMatrix[1][3] = vOrigin.y;
-		mMatrix[2][3] = vOrigin.z;
+		vOut.x = vIn.Dot(mIn[0]);
+		vOut.y = vIn.Dot(mIn[1]);
+		vOut.z = vIn.Dot(mIn[2]);
 	}
 
 	inline void MatrixCopy(const matrix3x4& mIn, matrix3x4& mOut)
@@ -373,14 +354,7 @@ namespace Math
 		vOrigin.y = mMatrix[1][3];
 		vOrigin.z = mMatrix[2][3];
 	}
-
-	inline Vec3 GetMatrixOrigin(const matrix3x4& mMatrix)
-	{
-		Vec3 vOut;
-		GetMatrixOrigin(mMatrix, vOut);
-		return vOut;
-	}
-
+	
 	inline void ConcatTransforms(const matrix3x4& mIn1, const matrix3x4& mIn2, matrix3x4& mOut)
 	{
 		if (&mIn1 == &mOut)
@@ -413,159 +387,88 @@ namespace Math
 		mOut[2][3] = mIn1[2][0] * mIn2[0][3] + mIn1[2][1] * mIn2[1][3] + mIn1[2][2] * mIn2[2][3] + mIn1[2][3];
 	}
 
-	inline void OffsetPolygon(std::vector<Vec3>& vVertices, const Vec3& vNormal, float flOffset)
+	inline std::vector<float> SolveQuadratic(float a, float b, float c)
 	{
-		for (auto& vVertex : vVertices)
-			vVertex += vNormal * flOffset;
+		float flRoot = powf(b, 2.f) - 4 * a * c;
+		if (flRoot < 0)
+			return {};
+
+		a *= 2;
+		b = -b;
+		return { (b + sqrt(flRoot)) / a, (b - sqrt(flRoot)) / a };
 	}
 
-	inline void ExpandPolygon(std::vector<Vec3>& vOldVertices, std::vector<Vec3>& vNewVertices, const Vec3& vNormal, float flOffset, const Vec3* pTarget = nullptr)
+	inline float SolveCubic(float b, float c, float d)
 	{
-		Vec3 vForward = (vNewVertices.front() - vNewVertices.back()).Normalized();
-		Vec3 vRight = vForward.Cross(vNormal).Normalized();
+		float p = c - powf(b, 2) / 3;
+		float q = 2 * powf(b, 3) / 27 - b * c / 3 + d;
 
-		vOldVertices = vNewVertices;
-		for (int i = 0, n = int(vNewVertices.size()); i < n; i++)
+		if (p == 0.f)
+			return pow(q, 1.f / 3);
+		if (q == 0.f)
+			return 0.f;
+
+		float t = sqrt(fabs(p) / 3);
+		float g = q / (2.f / 3) / (p * t);
+		if (p > 0.f)
+			return -2 * t * sinh(asinh(g) / 3) - b / 3;
+
+		if (4 * powf(p, 3) + 27 * powf(q, 2) < 0.f)
+			return 2 * t * cos(acos(g) / 3) - b / 3;
+		if (q > 0.f)
+			return -2 * t * cosh(acosh(-g) / 3) - b / 3;
+		return 2 * t * cosh(acosh(g) / 3) - b / 3;
+	}
+	
+	inline std::vector<float> SolveQuartic(float a, float b, float c, float d, float e)
+	{
+		std::vector<float> vRoots = {};
+
+		b /= a, c /= a, d /= a, e /= a;
+		float p = c - powf(b, 2) / (8.f / 3);
+		float q = powf(b, 3) / 8 - b * c / 2 + d;
+		float m = SolveCubic(
+			p,
+			powf(p, 2) / 4 + powf(b, 4) / (256.f / 3) - e + b * d / 4 - powf(b, 2) * c / 16,
+			-powf(q, 2) / 8
+		);
+		if (m < 0.f)
+			return vRoots;
+
+		float sqrt_2m = sqrt(2 * m);
+		if (q == 0.f)
 		{
-			Vec3& vVertex1 = vOldVertices[i], &vVertex2 = vOldVertices[(i + 1) % n], &vVertex3 = vOldVertices[(i + 2) % n];
-
-			Vec2 vPoint1 = { vVertex1.Dot(vForward), vVertex1.Dot(vRight) };
-			Vec2 vPoint2 = { vVertex2.Dot(vForward), vVertex2.Dot(vRight) };
-			Vec2 vPoint3 = { vVertex3.Dot(vForward), vVertex3.Dot(vRight) };
-
-			Vec2 vDelta21 = vPoint2 - vPoint1;
-			Vec2 vDelta32 = vPoint3 - vPoint2;
-
-			Vec2 vNormal1 = Vec2(vDelta21.y, -vDelta21.x).Normalized();
-			Vec2 vNormal2 = Vec2(vDelta32.y, -vDelta32.x).Normalized();
-
-			Vec2 vBisect = Vec2(vNormal1.x + vNormal2.x, vNormal1.y + vNormal2.y).Normalized();
-			float flDistance = flOffset / vNormal1.Dot(vBisect);
-			vBisect *= flDistance;
-
-			if (!pTarget)
-				vNewVertices[(i + 1) % n] += vForward * vBisect.x + vRight * vBisect.y;
-			else
+			if (-m - p > 0.f)
 			{
-				Vec3 vToTarget = *pTarget - vVertex2;
-				if (Vec3 vDisplacementX = vForward * vBisect.x; vDisplacementX.Dot(vToTarget) > 0.f)
-					vNewVertices[(i + 1) % n] += vDisplacementX;
-				if (Vec3 vDisplacementY = vRight * vBisect.y; vDisplacementY.Dot(vToTarget) > 0.f)
-					vNewVertices[(i + 1) % n] += vDisplacementY;
+				float flDelta = sqrt(2 * (-m - p));
+				vRoots.push_back(-b / 4 + (sqrt_2m - flDelta) / 2);
+				vRoots.push_back(-b / 4 - (sqrt_2m - flDelta) / 2);
+				vRoots.push_back(-b / 4 + (sqrt_2m + flDelta) / 2);
+				vRoots.push_back(-b / 4 - (sqrt_2m + flDelta) / 2);
+			}
+			if (-m - p == 0.f)
+			{
+				vRoots.push_back(-b / 4 - sqrt_2m / 2);
+				vRoots.push_back(-b / 4 + sqrt_2m / 2);
 			}
 		}
-	}
-	inline void ExpandPolygon(std::vector<Vec3>& vVertices, const Vec3& vNormal, float flOffset, const Vec3* pTarget = nullptr)
-	{
-		std::vector<Vec3> vTemporary;
-		ExpandPolygon(vTemporary, vVertices, vNormal, flOffset, pTarget);
-	}
-
-	inline Vec3 ClosestPointOnLine(const Vec3& vPoint, const Vec3& vPoint1, const Vec3& vPoint2)
-	{
-		Vec3 vDelta = vPoint2 - vPoint1;
-
-		float flRatio = std::clamp((vPoint - vPoint1).Dot(vDelta) / vDelta.Dot(vDelta), 0.f, 1.f);
-
-		return vPoint1 + vDelta * flRatio;
-	}
-
-	inline Vec3 ClosestPointOnTriangle(const Vec3& vPoint, const Vec3& vPoint1, const Vec3& vPoint2, const Vec3& vPoint3, bool* pInside = nullptr)
-	{
-		Vec3 vDelta21 = vPoint2 - vPoint1;
-		Vec3 vDelta31 = vPoint3 - vPoint1;
-		if (pInside) *pInside = false;
-
-		Vec3 vDeltaPT = vPoint - vPoint1;
-		float flDot1 = vDelta21.Dot(vDeltaPT);
-		float flDot2 = vDelta31.Dot(vDeltaPT);
-		if (flDot1 <= 0 && flDot2 <= 0)
-			return vPoint1;
-
-		vDeltaPT = vPoint - vPoint2;
-		float flDot3 = vDelta21.Dot(vDeltaPT);
-		float flDot4 = vDelta31.Dot(vDeltaPT);
-		if (flDot3 >= 0 && flDot4 <= flDot3)
-			return vPoint2;
-
-		vDeltaPT = vPoint - vPoint3;
-		float flDot5 = vDelta21.Dot(vDeltaPT);
-		float flDot6 = vDelta31.Dot(vDeltaPT);
-		if (flDot6 >= 0 && flDot5 <= flDot6)
-			return vPoint3;
-
-		float flSideC = flDot1 * flDot4 - flDot3 * flDot2;
-		if (flSideC <= 0 && flDot1 >= 0 && flDot3 <= 0)
+		else
 		{
-			float flRatio = flDot1 / (flDot1 - flDot3);
-			return vPoint1 + vDelta21 * flRatio;
+			if (-m - p + q / sqrt_2m >= 0.f)
+			{
+				float flDelta = sqrt(2 * (-m - p + q / sqrt_2m));
+				vRoots.push_back((-sqrt_2m + flDelta) / 2 - b / 4);
+				vRoots.push_back((-sqrt_2m - flDelta) / 2 - b / 4);
+			}
+			if (-m - p - q / sqrt_2m >= 0.f)
+			{
+				float flDelta = sqrt(2 * (-m - p - q / sqrt_2m));
+				vRoots.push_back((sqrt_2m + flDelta) / 2 - b / 4);
+				vRoots.push_back((sqrt_2m - flDelta) / 2 - b / 4);
+			}
 		}
-
-		float flSideB = flDot5 * flDot2 - flDot1 * flDot6;
-		if (flSideB <= 0 && flDot2 >= 0 && flDot6 <= 0)
-		{
-			float flRatio = flDot2 / (flDot2 - flDot6);
-			return vPoint1 + vDelta31 * flRatio;
-		}
-
-		float flSideA = flDot3 * flDot6 - flDot5 * flDot4;
-		if (flSideA <= 0 && (flDot4 - flDot3) >= 0 && (flDot5 - flDot6) >= 0)
-		{
-			float flRatio = (flDot4 - flDot3) / (flDot4 - flDot3 + flDot5 - flDot6);
-			return vPoint2 + (vPoint3 - vPoint2) * flRatio;
-		}
-
-		float flDenominator = 1 / (flSideA + flSideB + flSideC);
-		float flV = flSideB * flDenominator;
-		float flW = flSideC * flDenominator;
-		if (pInside) *pInside = true;
-		return vPoint1 + vDelta21 * flV + vDelta31 * flW;
-	}
-
-	inline Vec3 ClosestPointOnPolygon(const Vec3& vPoint, const std::vector<Vec3>& vVertices, const Vec3& vNormal, bool* pInside = nullptr)
-	{
-		float flDot = vNormal.Dot(vPoint - vVertices.front());
-		Vec3 vProjection = vPoint - flDot * vNormal;
-
-		for (int i = 0, n = int(vVertices.size()); i < n; i++)
-		{
-			const Vec3& vVertex1 = vVertices[i], &vVertex2 = vVertices[(i + 1) % n];
-
-			Vec3 vEdge = vVertex2 - vVertex1;
-			Vec3 vToProjection = vProjection - vVertex1;
-
-			if (vToProjection.Cross(vEdge).Dot(vNormal) < 0)
-				goto outside;
-		}
-		if (pInside) *pInside = true;
-		return vProjection;
-
-		outside:
-		float flLowestDistance = std::numeric_limits<float>::max();
-		for (int i = 0, n = int(vVertices.size()); i < n; i++)
-		{
-			const Vec3& vVertex1 = vVertices[i], &vVertex2 = vVertices[(i + 1) % n];
-
-			Vec3 vLine = ClosestPointOnLine(vPoint, vVertex1, vVertex2);
-			float flDistance = vLine.DistToSqr(vPoint);
-			if (flDistance < flLowestDistance)
-				vProjection = vLine, flLowestDistance = flDistance;
-		}
-		if (pInside) *pInside = false;
-		return vProjection;
-	}
-
-	// note: not clamped
-	inline float FullFraction(const Vec3& vDir, const CGameTrace& trace)
-	{
-		if (!trace.DidHit() || FNV1A::Hash32(trace.surface.name) == FNV1A::Hash32Const("**displacement**"))
-			return trace.fraction;
-
-		float flFractionEpsilon = DIST_EPSILON / vDir.Dot(trace.plane.normal);
-		return trace.fraction - flFractionEpsilon;
-	}
-	inline float FullFraction(const Vec3& vStart, const Vec3& vEnd, const CGameTrace& trace)
-	{
-		return FullFraction(vEnd - vStart, trace);
+		return vRoots;
 	}
 }
+
+#pragma warning (pop)

@@ -1,5 +1,10 @@
-#include "ChecksumCRC.h"
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//
+// Purpose: Generic CRC functions
+//
+//=============================================================================//
 
+#include "ChecksumCRC.h"
 #include <cstdint>
 
 #define CRC32_INIT_VALUE 0xFFFFFFFFUL

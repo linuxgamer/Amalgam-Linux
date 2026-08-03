@@ -16,8 +16,7 @@ static inline void SetMain(BaseVar*& pBase, int iBind)
 }
 #define Set(t, b) if (IsType(t)) SetMain<t>(pBase, b);
 
-static std::unordered_mapset<BaseVar*> s_mVars = {};
-static bool s_bUI = false, s_bMenu = false;
+static std::unordered_map<BaseVar*, bool> s_mVars = {};
 
 static inline void LoopVars(int iBind, std::vector<BaseVar*>& vVars = G::Vars)
 {
@@ -67,14 +66,16 @@ static inline void GetBinds(int iParent, CTFPlayer* pLocal, CTFWeaponBase* pWeap
 				case BindEnum::KeyEnum::Toggle: bKey = U::KeyHandler.Pressed(tBind.m_iKey, false, &tBind.m_tKeyStorage); break;
 				case BindEnum::KeyEnum::DoubleClick: bKey = U::KeyHandler.Double(tBind.m_iKey, false, &tBind.m_tKeyStorage); break;
 				}
-				bKey &= !s_bUI || s_bMenu && (!F::Menu.m_bWindowHovered || tBind.m_iKey != VK_LBUTTON && tBind.m_iKey != VK_RBUTTON); // allow in menu
+				const bool bShouldUse = !I::EngineVGui->IsGameUIVisible() && (!I::MatSystemSurface->IsCursorVisible() || I::EngineClient->IsPlayingDemo())
+					|| F::Menu.m_bIsOpen && !ImGui::GetIO().WantTextInput && !F::Menu.m_bInKeybind && (!F::Menu.m_bWindowHovered || tBind.m_iKey != VK_LBUTTON && tBind.m_iKey != VK_RBUTTON); // allow in menu
+				bKey = bShouldUse && bKey;
 
 				switch (tBind.m_iInfo)
 				{
 				case BindEnum::KeyEnum::Hold:
-					tBind.m_bActive = bKey;
 					if (tBind.m_bNot)
-						tBind.m_bActive = !tBind.m_bActive;
+						bKey = !bKey;
+					tBind.m_bActive = bKey;
 					break;
 				case BindEnum::KeyEnum::Toggle:
 				case BindEnum::KeyEnum::DoubleClick:
@@ -104,7 +105,10 @@ static inline void GetBinds(int iParent, CTFPlayer* pLocal, CTFWeaponBase* pWeap
 			}
 			case BindEnum::WeaponType:
 			{
-				tBind.m_bActive = tBind.m_iInfo == BindEnum::WeaponTypeEnum::Throwable ? G::Throwing : tBind.m_iInfo + 1 == int(SDK::GetWeaponType(pWeapon));
+				if (tBind.m_iInfo != BindEnum::WeaponTypeEnum::Throwable)
+					tBind.m_bActive = tBind.m_iInfo + 1 == int(SDK::GetWeaponType(pWeapon));
+				else
+					tBind.m_bActive = G::Throwing;
 				if (tBind.m_bNot)
 					tBind.m_bActive = !tBind.m_bActive;
 				break;
@@ -112,59 +116,6 @@ static inline void GetBinds(int iParent, CTFPlayer* pLocal, CTFWeaponBase* pWeap
 			case BindEnum::ItemSlot:
 			{
 				tBind.m_bActive = tBind.m_iInfo == (pWeapon ? pWeapon->GetSlot() : -1);
-				if (tBind.m_bNot)
-					tBind.m_bActive = !tBind.m_bActive;
-				break;
-			}
-			case BindEnum::Misc:
-			{
-				switch (tBind.m_iInfo)
-				{
-				case BindEnum::MiscEnum::Spectated:
-				case BindEnum::MiscEnum::SpectatedFirst:
-				case BindEnum::MiscEnum::SpectatedThird:
-				{
-					bool bFirst = false, bThird = false;
-					if (auto pResource = H::Entities.GetResource())
-					{
-						int iLocal = I::EngineClient->GetLocalPlayer();
-						for (int n = 1; n <= I::EngineClient->GetMaxClients(); n++)
-						{
-							auto pPlayer = I::ClientEntityList->GetClientEntity(n)->As<CTFPlayer>();
-
-							if (iLocal == n || pResource->IsFakePlayer(n)
-								|| !pPlayer || !pPlayer->IsPlayer() || pPlayer->IsAlive() || pPlayer->IsDormant()
-								|| pResource->m_iTeam(iLocal) != pResource->m_iTeam(n))
-								continue;
-
-							int iObserverTarget = pPlayer->m_hObserverTarget().GetEntryIndex();
-							int iObserverMode = pPlayer->m_iObserverMode();
-							if (iObserverTarget != iLocal)
-								continue;
-
-							switch (iObserverMode)
-							{
-							case OBS_MODE_FIRSTPERSON: bFirst = true; break;
-							case OBS_MODE_THIRDPERSON: bThird = true; break;
-							}
-						}
-					}
-
-					switch (tBind.m_iInfo)
-					{
-					case BindEnum::MiscEnum::Spectated: tBind.m_bActive = bFirst || bThird; break;
-					case BindEnum::MiscEnum::SpectatedFirst: tBind.m_bActive = bFirst; break;
-					case BindEnum::MiscEnum::SpectatedThird: tBind.m_bActive = bThird; break;
-					}
-					break;
-				}
-				case BindEnum::MiscEnum::Zoomed:
-					tBind.m_bActive = pLocal ? pLocal->InCond(TF_COND_ZOOMED) : false;
-					break;
-				case BindEnum::MiscEnum::Aiming:
-					tBind.m_bActive = pLocal ? pLocal->InCond(TF_COND_AIMING) : false;
-					break;
-				}
 				if (tBind.m_bNot)
 					tBind.m_bActive = !tBind.m_bActive;
 				break;
@@ -183,13 +134,8 @@ static inline void GetBinds(int iParent, CTFPlayer* pLocal, CTFWeaponBase* pWeap
 void CBinds::SetVars(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, bool bManage)
 {
 	s_mVars.clear();
-	s_bUI = I::EngineVGui->IsGameUIVisible() || I::MatSystemSurface->IsCursorVisible() && !I::EngineClient->IsPlayingDemo();
-	s_bMenu = F::Menu.m_bIsOpen && !ImGui::GetIO().WantTextInput && !F::Menu.m_bInKeybind;
-
 	GetBinds(DEFAULT_BIND, pLocal, pWeapon, m_vBinds, bManage);
 	LoopVars(DEFAULT_BIND);
-
-	m_bDisplay = F::Menu.m_bIsOpen || Vars::Menu::BindWindow.Value && !s_bUI;
 }
 
 void CBinds::Run()
@@ -304,49 +250,49 @@ void CBinds::RemoveBind(int iBind, bool bForce)
 	}
 
 	std::vector<int> vErases = {};
-	std::function<void(int)> fSearchBinds = [&](int iIndex)
-	{
-		for (int iBind = 0; iBind < m_vBinds.size(); iBind++)
+	std::function<void(int)> searchBinds = [&](int iIndex)
 		{
-			auto& tBind = m_vBinds[iBind];
-			if (iIndex == tBind.m_iParent && iIndex != iBind)
-				fSearchBinds(iBind);
-		}
-		vErases.push_back(iIndex);
-	};
-	auto fRemoveBind = [&](int iIndex)
-	{
-		if (iIndex < m_vBinds.size())
-			m_vBinds.erase(std::next(m_vBinds.begin(), iIndex));
-		for (auto& tBind : m_vBinds)
+			for (int iBind = 0; iBind < m_vBinds.size(); iBind++)
+			{
+				auto& tBind = m_vBinds[iBind];
+				if (iIndex == tBind.m_iParent && iIndex != iBind)
+					searchBinds(iBind);
+			}
+			vErases.push_back(iIndex);
+		};
+	auto removeBind = [&](int iIndex)
 		{
-			if (tBind.m_iParent != DEFAULT_BIND && tBind.m_iParent > iIndex)
-				tBind.m_iParent--;
-		}
+			if (iIndex < m_vBinds.size())
+				m_vBinds.erase(std::next(m_vBinds.begin(), iIndex));
+			for (auto& tBind : m_vBinds)
+			{
+				if (tBind.m_iParent != DEFAULT_BIND && tBind.m_iParent > iIndex)
+					tBind.m_iParent--;
+			}
 
-		for (auto& pBase : G::Vars)
-		{
-			Remove(bool, iIndex)
-			else Remove(int, iIndex)
-			else Remove(float, iIndex)
-			else Remove(IntRange_t, iIndex)
-			else Remove(FloatRange_t, iIndex)
-			else Remove(std::string, iIndex)
-			else Remove(VA_LIST(std::vector<std::pair<std::string, Color_t>>), iIndex)
-			else Remove(Color_t, iIndex)
-			else Remove(Gradient_t, iIndex)
-			else Remove(Vec3, iIndex)
-			else Remove(DragBox_t, iIndex)
-			else Remove(WindowBox_t, iIndex)
-		}
-	};
-	fSearchBinds(iBind);
+			for (auto& pBase : G::Vars)
+			{
+				Remove(bool, iIndex)
+				else Remove(int, iIndex)
+				else Remove(float, iIndex)
+				else Remove(IntRange_t, iIndex)
+				else Remove(FloatRange_t, iIndex)
+				else Remove(std::string, iIndex)
+				else Remove(VA_LIST(std::vector<std::pair<std::string, Color_t>>), iIndex)
+				else Remove(Color_t, iIndex)
+				else Remove(Gradient_t, iIndex)
+				else Remove(Vec3, iIndex)
+				else Remove(DragBox_t, iIndex)
+				else Remove(WindowBox_t, iIndex)
+			}
+		};
+	searchBinds(iBind);
 	std::sort(vErases.begin(), vErases.end(), [&](const int a, const int b) -> bool
-	{
-		return a > b;
-	});
+		{
+			return a > b;
+		});
 	for (auto iIndex : vErases)
-		fRemoveBind(iIndex);
+		removeBind(iIndex);
 }
 
 int CBinds::GetParent(int iBind)
@@ -417,8 +363,8 @@ void CBinds::Move(int i1, int i2)
 		else if (tBind.m_iParent == i2)
 			vBinds2.push_back(&tBind);
 	}
-	for (auto pBind : vBinds1) pBind->m_iParent = i2;
-	for (auto pBind : vBinds2) pBind->m_iParent = i1;
+	std::for_each(vBinds1.begin(), vBinds1.end(), [&](auto pBind) { pBind->m_iParent = i2; });
+	std::for_each(vBinds2.begin(), vBinds2.end(), [&](auto pBind) { pBind->m_iParent = i1; });
 
 	for (auto& pBase : G::Vars)
 	{

@@ -1,8 +1,10 @@
 #pragma once
 #include "IClientUnknown.h"
-#include "../Misc/ClientClass.h"
 #include "../Misc/bitbuf.h"
+#include "../Misc/ClientClass.h"
 #include "../Definitions.h"
+
+class IClientEntity;
 
 enum ShouldTransmitState_t
 {

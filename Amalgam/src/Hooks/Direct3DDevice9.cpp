@@ -4,13 +4,23 @@
 #include "../Features/ImGui/Render.h"
 #include "../Features/ImGui/Menu/Menu.h"
 
+// #define USE_CUSTOM_GUI  // Disabled - using original menu
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Helper to check if any menu is open
+inline bool IsAnyMenuOpen()
+{
+#ifdef USE_CUSTOM_GUI
+	return F::CustomMenu.m_bIsOpen;
+#else
+	return F::Menu.m_bIsOpen;
+#endif
+}
 
 MAKE_HOOK(Direct3DDevice9_Present, U::Memory.GetVirtual(I::DirectXDevice, 17), HRESULT,
 	IDirect3DDevice9* pDevice, const RECT* pSource, const RECT* pDestination, const RGNDATA* pDirtyRegion)
 {
-	DEBUG_RETURN(Direct3DDevice9_Present, pDevice, pSource, pDestination, pDirtyRegion);
-
 	if (!G::Unload)
 		F::Render.Render(pDevice);
 
@@ -20,8 +30,6 @@ MAKE_HOOK(Direct3DDevice9_Present, U::Memory.GetVirtual(I::DirectXDevice, 17), H
 MAKE_HOOK(Direct3DDevice9_Reset, U::Memory.GetVirtual(I::DirectXDevice, 16), HRESULT,
 	LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
 {
-	DEBUG_RETURN(Direct3DDevice9_Reset, pDevice, pPresentationParameters);
-
 	ImGui_ImplDX9_InvalidateDeviceObjects();
 	const HRESULT Original = CALL_ORIGINAL(pDevice, pPresentationParameters);
 	ImGui_ImplDX9_CreateDeviceObjects();
@@ -30,11 +38,15 @@ MAKE_HOOK(Direct3DDevice9_Reset, U::Memory.GetVirtual(I::DirectXDevice, 16), HRE
 
 LONG __stdcall WndProc::Func(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	if (F::Menu.m_bIsOpen)
+	if (IsAnyMenuOpen())
 	{
 		ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
 
+#ifndef USE_CUSTOM_GUI
 		if ((ImGui::GetIO().WantTextInput || F::Menu.m_bInKeybind) && WM_KEYFIRST <= uMsg && uMsg <= WM_KEYLAST)
+#else
+		if (ImGui::GetIO().WantTextInput && WM_KEYFIRST <= uMsg && uMsg <= WM_KEYLAST)
+#endif
 		{
 			I::InputSystem->ResetInputState();
 			return 1;
@@ -50,9 +62,7 @@ LONG __stdcall WndProc::Func(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 MAKE_HOOK(VGuiSurface_LockCursor, U::Memory.GetVirtual(I::MatSystemSurface, 62), void,
 	void* rcx)
 {
-	DEBUG_RETURN(VGuiSurface_LockCursor, rcx);
-
-	if (F::Menu.m_bIsOpen)
+	if (IsAnyMenuOpen())
 		return I::MatSystemSurface->UnlockCursor();
 
 	CALL_ORIGINAL(rcx);
@@ -61,9 +71,7 @@ MAKE_HOOK(VGuiSurface_LockCursor, U::Memory.GetVirtual(I::MatSystemSurface, 62),
 MAKE_HOOK(VGuiSurface_SetCursor, U::Memory.GetVirtual(I::MatSystemSurface, 51), void,
 	void* rcx, HCursor cursor)
 {
-	DEBUG_RETURN(VGuiSurface_SetCursor, rcx, cursor);
-
-	if (F::Menu.m_bIsOpen)
+	if (IsAnyMenuOpen())
 	{
 		switch (F::Render.Cursor)
 		{

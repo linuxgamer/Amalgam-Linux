@@ -7,8 +7,9 @@
 #include "../Features/EnginePrediction/EnginePrediction.h"
 #include "../Features/Visuals/Materials/Materials.h"
 #include "../Features/Visuals/Visuals.h"
-#include "../Features/Spectate/Spectate.h"
+#include "../Features/DiscordRPC/DiscordRPC.h"
 #include "../SDK/Events/Events.h"
+#include "../../media_player.h"
 #include <Psapi.h>
 
 static inline std::string GetProcessName(DWORD dwProcessID)
@@ -33,14 +34,14 @@ static inline bool CheckDXLevel()
 	if (mat_dxlevel->GetInt() < 90)
 	{
 		/*
-		const char* sMessage = "You are running with graphics options that Amalgam does not support. -dxlevel must be at least 90.";
+		const char* sMessage = "You are running with graphics options that Aletherium does not support. -dxlevel must be at least 90.";
 		U::Core.AppendFailText(sMessage);
-		SDK::Output("Amalgam", sMessage, ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
+		SDK::Output("Aletherium", sMessage, DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
 		return false;
 		*/
 
-		const char* sMessage = "You are running with graphics options that Amalgam does not support. It is recommended for -dxlevel to be at least 90.";
-		SDK::Output("Amalgam", sMessage, WARNING_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_WARNING);
+		const char* sMessage = "You are running with graphics options that Aletherium does not support. It is recommended for -dxlevel to be at least 90.";
+		SDK::Output("Aletherium", sMessage, DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
 	}
 
 	return true;
@@ -70,11 +71,11 @@ void CCore::LogFailText()
 
 		m_ssFailStream << "\n";
 		m_ssFailStream << "Ctrl + C to copy. \n";
-		m_ssFailStream << "Logged to Amalgam\\fail_log.txt. ";
+		m_ssFailStream << "Logged to Aletherium\\fail_log.txt. ";
 	}
 	catch (...) {}
 
-	SDK::Output("Failed to load", m_ssFailStream.str().c_str(), {}, OUTPUT_DEBUG, nullptr, MB_OK | MB_ICONERROR);
+	SDK::Output("Failed to load", m_ssFailStream.str().c_str(), {}, OUTPUT_DEBUG, MB_OK | MB_ICONERROR);
 }
 
 void CCore::Load()
@@ -113,17 +114,31 @@ void CCore::Load()
 	if (m_bUnload = m_bFailed2 = !U::Hooks.Initialize() || !U::BytePatches.Initialize() || !H::Events.Initialize())
 		return;
 	F::Materials.LoadMaterials();
-	H::Fonts.Reload();
+	H::ConVars.Unlock();
+
 	F::Configs.LoadConfig(F::Configs.m_sCurrentConfig, false);
 
-	SDK::Output("Amalgam", "Loaded", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+	// Initialize Discord RPC
+	F::DiscordRPC.Initialize();
+
+	// Initialize Media Player (old simple way)
+	Initialize();
+
+	// Start your original threads
+	CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)GetNowPlayingInfoAndSaveAlbumArt, nullptr, 0, nullptr);
+	CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)UpdatePosition, nullptr, 0, nullptr);
+
+	SDK::Output("Aletherium", "Loaded", DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
 }
 
 void CCore::Loop()
 {
 	while (true)
 	{
-		bool bShouldUnload = U::KeyHandler.Down(VK_F11, true) && SDK::IsGameWindowInFocus() || m_bUnload;
+		// Update Discord RPC
+		F::DiscordRPC.Update();
+
+		bool bShouldUnload = U::KeyHandler.Down(VK_F11) && SDK::IsGameWindowInFocus() || m_bUnload;
 		if (bShouldUnload)
 			break;
 
@@ -139,6 +154,18 @@ void CCore::Unload()
 		return;
 	}
 
+	// Shutdown Discord RPC
+	F::DiscordRPC.Shutdown();
+
+	// Cleanup Media Player (old simple way)
+	g_bMediaPlayerShouldExit = true;
+	Sleep(100); // Give thread time to exit
+	if (albumArtTexture)
+	{
+		albumArtTexture->Release();
+		albumArtTexture = nullptr;
+	}
+
 	G::Unload = true;
 	m_bFailed2 = !U::Hooks.Unload() || m_bFailed2;
 	U::BytePatches.Unload();
@@ -146,22 +173,17 @@ void CCore::Unload()
 
 	if (F::Menu.m_bIsOpen)
 		I::MatSystemSurface->SetCursorAlwaysVisible(false);
-	H::ConVars.FindVar("cl_wpn_sway_interp")->SetValue(0.f);
-	H::ConVars.FindVar("cl_wpn_sway_scale")->SetValue(0.f);
 	F::Visuals.RestoreWorldModulation();
-	if (auto pLocal = H::Entities.GetLocal())
+	if (I::Input->CAM_IsThirdPerson())
 	{
-		if (F::Spectate.HasTarget())
-		{
-			F::Spectate.NetUpdateStart(pLocal);
-			I::EngineClient->SetViewAngles(F::Spectate.m_vOldView);
-		}
-		if (I::Input->CAM_IsThirdPerson())
+		if (auto pLocal = H::Entities.GetLocal())
 		{
 			I::Input->CAM_ToFirstPerson();
 			pLocal->ThirdPersonSwitch();
 		}
 	}
+	H::ConVars.FindVar("cl_wpn_sway_interp")->SetValue(0.f);
+	H::ConVars.FindVar("cl_wpn_sway_scale")->SetValue(0.f);
 
 	Sleep(250);
 	F::EnginePrediction.Unload();
@@ -174,5 +196,5 @@ void CCore::Unload()
 		return;
 	}
 
-	SDK::Output("Amalgam", "Unloaded", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_DEBUG);
+	SDK::Output("Aletherium", "Unloaded", DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_DEBUG);
 }

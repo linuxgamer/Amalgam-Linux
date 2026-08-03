@@ -279,13 +279,13 @@ PriorityLabel_t* CPlayerlistUtils::GetSignificantTag(uint32_t uAccountID, int iM
 		return nullptr;
 
 	std::sort(vTags.begin(), vTags.end(), [&](const PriorityLabel_t* a, const PriorityLabel_t* b) -> bool
-	{
-		// sort by priority if unequal
-		if (a->m_iPriority != b->m_iPriority)
-			return a->m_iPriority > b->m_iPriority;
+		{
+			// sort by priority if unequal
+			if (a->m_iPriority != b->m_iPriority)
+				return a->m_iPriority > b->m_iPriority;
 
-		return a->m_sName < b->m_sName;
-	});
+			return a->m_sName < b->m_sName;
+		});
 	return vTags.front();
 }
 PriorityLabel_t* CPlayerlistUtils::GetSignificantTag(int iIndex, int iMode)
@@ -382,17 +382,17 @@ const char* CPlayerlistUtils::GetPlayerName(int iIndex, const char* sDefault, in
 	switch (iType)
 	{
 	case NameTypeEnum::Local:
-		return LOCAL;
+		return "Local";
 	case NameTypeEnum::Friend:
-		return FRIEND;
+		return "Friend";
 	case NameTypeEnum::Party:
-		return PARTY;
+		return "Party";
 	case NameTypeEnum::Player:
 		if (auto pTag = GetSignificantTag(iIndex, 0))
 			return pTag->m_sName.c_str();
 		else if (auto pResource = H::Entities.GetResource(); pResource && pResource->m_bValid(iIndex))
-			return pResource->m_iTeam(I::EngineClient->GetLocalPlayer()) != pResource->m_iTeam(iIndex) ? ENEMY : TEAMMATE;
-		return PLAYER;
+			return pResource->m_iTeam(I::EngineClient->GetLocalPlayer()) != pResource->m_iTeam(iIndex) ? "Enemy" : "Teammate";
+		return "Player";
 	case NameTypeEnum::Custom:
 		if (auto sAlias = GetPlayerAlias(GetAccountID(iIndex)))
 			return sAlias->c_str();
@@ -408,35 +408,22 @@ const char* CPlayerlistUtils::GetPlayerName(uint32_t uAccountID, const char* sDe
 	switch (iType)
 	{
 	case NameTypeEnum::Local:
-		return LOCAL;
+		return "Local";
 	case NameTypeEnum::Friend:
-		return FRIEND;
+		return "Friend";
 	case NameTypeEnum::Party:
-		return PARTY;
+		return "Party";
 	case NameTypeEnum::Player:
 		if (auto pTag = GetSignificantTag(uAccountID, 0))
 			return pTag->m_sName.c_str();
 		else if (auto pResource = H::Entities.GetResource(); (iType = GetIndex(uAccountID)) && pResource && pResource->m_bValid(iType))
-			return pResource->m_iTeam(I::EngineClient->GetLocalPlayer()) != pResource->m_iTeam(iType) ? ENEMY : TEAMMATE;
-		return PLAYER;
+			return pResource->m_iTeam(I::EngineClient->GetLocalPlayer()) != pResource->m_iTeam(iType) ? "Enemy" : "Teammate";
+		return "Player";
 	case NameTypeEnum::Custom:
 		if (auto sAlias = GetPlayerAlias(uAccountID))
 			return sAlias->c_str();
 	}
 	return sDefault;
-}
-
-const char* CPlayerlistUtils::GetPlayerName(int iIndex)
-{
-	auto pResource = H::Entities.GetResource();
-	return pResource && pResource->IsValid(iIndex) ? pResource->GetName(iIndex) : PLAYER_ERROR_NAME;
-}
-
-const char* CPlayerlistUtils::GetPlayerName(uint32_t uAccountID)
-{
-	auto pResource = H::Entities.GetResource();
-	int iIndex = GetIndex(uAccountID);
-	return pResource && pResource->IsValid(iIndex) ? pResource->GetName(iIndex) : PLAYER_ERROR_NAME;
 }
 
 

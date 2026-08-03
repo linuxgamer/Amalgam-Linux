@@ -7,11 +7,6 @@ int CBaseEntity::GetIntermediateDataSize()
 	return std::max(GetPredDescMap()->packed_size, 4);
 }
 
-Vec3 CBaseEntity::GetOrigin(float flCompression)
-{
-	return m_vecOrigin() + Vec3(flCompression / 2 * sign(m_vecOrigin().x), flCompression / 2 * sign(m_vecOrigin().y), flCompression / 2 * sign(m_vecOrigin().z));
-}
-
 Vec3 CBaseEntity::GetSize()
 {
 	return m_vecMaxs() - m_vecMins();
@@ -31,15 +26,6 @@ Vec3 CBaseEntity::GetRenderCenter()
 {
 	Vec3 vMins, vMaxs; GetRenderBounds(vMins, vMaxs);
 	return GetRenderOrigin() + (vMaxs - vMins) / 2;
-}
-
-studiohdr_t* CBaseEntity::GetStudiomodel()
-{
-	auto pModel = GetModel();
-	if (!pModel)
-		return nullptr;
-
-	return I::ModelInfoClient->GetStudiomodel(pModel);
 }
 
 int CBaseEntity::IsInValidTeam()

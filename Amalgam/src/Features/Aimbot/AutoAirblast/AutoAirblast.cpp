@@ -25,7 +25,7 @@ static inline bool ShouldTarget(CBaseEntity* pProjectile, CTFPlayer* pLocal)
 	return true;
 }
 
-bool CAutoAirblast::CanAirblastEntity(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CBaseEntity* pEntity, const Vec3& vAngle)
+bool CAutoAirblast::CanAirblastEntity(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CBaseEntity* pEntity, Vec3& vAngle)
 {
 	auto flRadius = SDK::AttribHookValue(1, "deflection_size_multiplier", pWeapon) * 128.f;
 
@@ -82,14 +82,14 @@ void CAutoAirblast::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCm
 		pProjectile->SetAbsOrigin(vOrigin);
 		if (Vars::Aimbot::Projectile::AutoAirblast.Value & Vars::Aimbot::Projectile::AutoAirblastEnum::Redirect)
 		{
-			Vec3 vAngles = Math::CalcAngle(vEyePos, vOrigin);
-			if (CanAirblastEntity(pLocal, pWeapon, pProjectile, vAngles))
+			Vec3 vAngle = Math::CalcAngle(vEyePos, vOrigin);
+			if (CanAirblastEntity(pLocal, pWeapon, pProjectile, vAngle))
 			{
 				bShouldBlast = true;
 				if (!F::AimbotProjectile.AutoAirblast(pLocal, pWeapon, pCmd, pProjectile))
 				{
-					SDK::FixMovement(pCmd, vAngles);
-					pCmd->viewangles = vAngles;
+					SDK::FixMovement(pCmd, vAngle);
+					pCmd->viewangles = vAngle;
 					G::PSilentAngles = true;
 				}
 			}

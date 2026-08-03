@@ -1,21 +1,13 @@
 #pragma once
 #include "../../SDK/SDK.h"
 
-struct Projectile_t
-{
-	std::vector<Vec3> m_vPath = {};
-	float m_flTime = 0.f;
-	float m_flRadius = 0.f;
-	Vec3 m_vNormal = { 0, 0, 1 };
-	Color_t m_tColor = {};
-	int m_iFlags = 0b0;
-};
+#include <map>
 
 struct Sightline_t
 {
 	Vec3 m_vStart = {};
 	Vec3 m_vEnd = {};
-	Color_t m_tColor = {};
+	Color_t m_Color = {};
 	bool m_bZBuffer = false;
 };
 
@@ -29,18 +21,19 @@ struct PickupData_t
 class CVisuals
 {
 private:
-	std::unordered_map<CBaseEntity*, Projectile_t> m_mProjectiles = {};
+	int m_nHudZoom = 0;
 	std::vector<Sightline_t> m_vSightLines = {};
 	std::vector<PickupData_t> m_vPickups = {};
-	std::vector<Vec3> m_vAngles = {};
 
 public:
 	void Event(IGameEvent* pEvent, uint32_t uHash);
-	void Store();
-	void Tick();
+	void Store(CTFPlayer* pLocal);
 
-	void ProjectileTrace(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, const bool bInterp = true);
+	void ProjectileTrace(CTFPlayer* pPlayer, CTFWeaponBase* pWeapon, const bool bQuick = true);
+	void SplashRadius(CTFPlayer* pLocal);
+	void DrawAntiAim(CTFPlayer* pLocal);
 	void DrawPickupTimers();
+	void DrawDebugInfo(CTFPlayer* pLocal);
 
 	std::vector<DrawBox_t> GetHitboxes(matrix3x4* aBones, CBaseAnimating* pEntity, std::vector<int> vHitboxes = {}, int iTarget = -1);
 	void DrawEffects();
@@ -54,7 +47,6 @@ public:
 	void RestoreWorldModulation();
 
 	void CreateMove(CTFPlayer* pLocal, CTFWeaponBase* pWeapon);
-	void LocalAnimations(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bool bSendPacket);
 };
 
 ADD_FEATURE(CVisuals, Visuals);

@@ -7,7 +7,10 @@ MAKE_SIGNATURE(CL_ReadPackets, "engine.dll", "4C 8B DC 49 89 5B ? 55 56 57 41 54
 MAKE_HOOK(CL_ReadPackets, S::CL_ReadPackets(), void,
 	bool bFinalTick)
 {
-	DEBUG_RETURN(CL_ReadPackets, bFinalTick);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CL_ReadPackets[DEFAULT_BIND])
+		return CALL_ORIGINAL(bFinalTick);
+#endif
 
 	if (F::NetworkFix.ShouldReadPackets())
 		CALL_ORIGINAL(bFinalTick);

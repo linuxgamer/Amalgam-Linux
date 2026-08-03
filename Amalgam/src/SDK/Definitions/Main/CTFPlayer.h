@@ -2,11 +2,8 @@
 #include "CBasePlayer.h"
 #include "CMultiPlayerAnimState.h"
 
-#define PLAYER_ORIGIN_COMPRESSION 0.125f
-
 MAKE_SIGNATURE(CTFPlayer_IsPlayerOnSteamFriendsList, "client.dll", "40 57 48 81 EC ? ? ? ? 48 8B FA E8", 0x0);
 MAKE_SIGNATURE(TeamFortress_CalculateMaxSpeed, "client.dll", "40 53 41 56 41 57 48 81 EC ? ? ? ? 48 83 3D", 0x0);
-MAKE_SIGNATURE(CTFPlayer_GetMaxAmmo, "client.dll", "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 63 FA 48 8B F1", 0x0);
 MAKE_SIGNATURE(CTFPlayer_UpdateClientSideAnimation, "client.dll", "48 89 5C 24 ? 57 48 83 EC ? 48 8B D9 E8 ? ? ? ? 48 8B F8 48 85 C0 74 ? 48 8B 00 48 8B CF FF 90 ? ? ? ? 84 C0 75 ? 33 FF 48 3B DF", 0x0);
 MAKE_SIGNATURE(CTFPlayer_GetEffectiveInvisibilityLevel, "client.dll", "40 57 48 83 EC ? 0F 29 7C 24", 0x0);
 MAKE_SIGNATURE(CTFPlayer_UpdateWearables, "client.dll", "40 53 48 83 EC ? 48 8B D9 E8 ? ? ? ? 48 8B 03 48 8B CB FF 90 ? ? ? ? 4C 8D 0D ? ? ? ? C7 44 24 ? ? ? ? ? 48 8B C8 4C 8D 05 ? ? ? ? 33 D2 E8 ? ? ? ? 48 85 C0", 0x0);
@@ -184,34 +181,29 @@ public:
 	NETVAR(m_iCampaignMedals, int, "CTFPlayer", "m_iCampaignMedals");
 	NETVAR(m_iPlayerSkinOverride, int, "CTFPlayer", "m_iPlayerSkinOverride");
 	NETVAR(m_bViewingCYOAPDA, bool, "CTFPlayer", "m_bViewingCYOAPDA");
-	NETVAR(m_bRegenerating, bool, "CTFPlayer", "m_bRegenerating");
-	NETVAR(m_hOffHandWeapon, EHANDLE, "CTFPlayer", "m_hOffHandWeapon");
 
-	NETVAR_OFF(m_flTankPressure, float, "CTFPlayer", "m_Shared", 636);
 	NETVAR_OFF(m_flInvisibility, float, "CTFPlayer", "m_flInvisChangeCompleteTime", -8);
 	NETVAR_OFF(m_flPrevInvisibility, float, "CTFPlayer", "m_flInvisChangeCompleteTime", -4);
-	NETVAR_OFF(m_pCritBoostSoundLoop, void*, "CTFPlayer", "m_flSpyTranqBuffDuration", 12);
-	NETVAR_OFF(m_bScattergunJump, bool, "CTFPlayer", "m_flSpyTranqBuffDuration", 20);
+	NETVAR_OFF(m_flTankPressure, float, "CTFPlayer", "m_Shared", 636);
 	NETVAR_OFF(m_PlayerAnimState, CTFPlayerAnimState*, "CTFPlayer", "m_hItem", -88);
+	NETVAR_OFF(m_flPrevTauntYaw, float, "CTFPlayer", "m_flTauntYaw", 4);
 	NETVAR_OFF(m_flLastMovementStunChange, float, "CTFPlayer", "m_hItem", -180);
 	NETVAR_OFF(m_flStunLerpTarget, float, "CTFPlayer", "m_hItem", -184);
 	NETVAR_OFF(m_bStunNeedsFadeOut, bool, "CTFPlayer", "m_hItem", -188);
 	NETVAR_OFF(m_bTauntForceMoveForward, bool, "CTFPlayer", "m_bAllowMoveDuringTaunt", 1);
 	NETVAR_OFF(m_flTauntForceMoveForwardSpeed, float, "CTFPlayer", "m_bAllowMoveDuringTaunt", 4);
-	NETVAR_OFF(m_flPrevTauntYaw, float, "CTFPlayer", "m_flTauntYaw", 4);
 
 	VIRTUAL(GetMaxHealth, int, 107, this);
 	VIRTUAL(ThirdPersonSwitch, void, 256, this);
 
-	SIGNATURE(IsPlayerOnSteamFriendsList, bool, CTFPlayer, this, this);
 	SIGNATURE_ARGS(CalculateMaxSpeed, float, TeamFortress, (bool bIgnoreSpecialAbility = false), this, bIgnoreSpecialAbility);
-	SIGNATURE_ARGS(GetMaxAmmo, int, CTFPlayer, (int iAmmoIndex, int iClassIndex = -1), this, iAmmoIndex, iClassIndex);
+	SIGNATURE(IsPlayerOnSteamFriendsList, bool, CTFPlayer, this, this);
 	SIGNATURE(UpdateClientSideAnimation, void, CTFPlayer, this);
 	SIGNATURE(GetEffectiveInvisibilityLevel, float, CTFPlayer, this);
 	SIGNATURE(UpdateWearables, void, CTFPlayer, this);
 
 	Vec3 GetEyeAngles();
-	Vec3 GetViewOffset(bool bScale = true); // use on nonlocal players
+	Vec3 GetViewOffset(); // use on nonlocal players
 	bool InCond(ETFCond eCond);
 	void AddCond(ETFCond eCond); // bits only
 	void RemoveCond(ETFCond eCond); // bits only

@@ -2,8 +2,8 @@
 #include "ImageFormat.h"
 #include "BaseTypes.h"
 
-struct ShaderColorCorrectionInfo_t;
 typedef unsigned int ColorCorrectionHandle_t;
+struct ShaderColorCorrectionInfo_t;
 
 class IColorCorrectionSystem
 {

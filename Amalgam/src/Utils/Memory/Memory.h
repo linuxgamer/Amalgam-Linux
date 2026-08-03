@@ -19,20 +19,14 @@ public:
 
 	inline void* GetVirtual(void* p, size_t i)
 	{
-		auto vTable = *reinterpret_cast<void***>(p);
-		return vTable[i];
-	}
-
-	inline void* GetVirtual(uintptr_t u, size_t i)
-	{
-		auto vTable = *reinterpret_cast<void***>(u);
+		auto vTable = *static_cast<void***>(p);
 		return vTable[i];
 	}
 
 	template <size_t I, typename T, typename... Args>
 	inline T CallVirtual(void* p, Args... args) const
 	{
-		auto vTable = *reinterpret_cast<void***>(p);
+		auto vTable = *static_cast<void***>(p);
 		return reinterpret_cast<T(__fastcall*)(void*, Args...)>(vTable[I])(p, args...);
 	}
 
@@ -40,7 +34,7 @@ public:
 	inline T CallVirtual(uintptr_t u, Args... args) const
 	{
 		auto p = reinterpret_cast<void*>(u);
-		auto vTable = *reinterpret_cast<void***>(p);
+		auto vTable = *static_cast<void***>(p);
 		return reinterpret_cast<T(__fastcall*)(void*, Args...)>(vTable[I])(p, args...);
 	}
 
@@ -63,11 +57,6 @@ ADD_FEATURE_CUSTOM(CMemory, Memory, U);
 #define OFFSET(name, type, offset) inline type& name() \
 { \
 	return *reinterpret_cast<type*>(uintptr_t(this) + offset); \
-}
-
-#define OFFSET_EMBED(name, type, offset) inline type name() \
-{ \
-	return reinterpret_cast<type>(uintptr_t(this) + offset); \
 }
 
 #define CONDGET(name, conditions, cond) inline bool name() \

@@ -7,7 +7,10 @@ MAKE_SIGNATURE(CPlayerResource_GetPlayerName, "client.dll", "48 89 5C 24 ? 56 48
 MAKE_HOOK(CPlayerResource_GetPlayerName, S::CPlayerResource_GetPlayerName(), const char*,
 	void* rcx, int iIndex)
 {
-	DEBUG_RETURN(CPlayerResource_GetPlayerName, rcx, iIndex);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CPlayerResource_GetPlayerName[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, iIndex);
+#endif
 
 	return F::PlayerUtils.GetPlayerName(iIndex, CALL_ORIGINAL(rcx, iIndex));
 }

@@ -17,15 +17,21 @@ struct RestoreInfo_t
 class CEnginePrediction
 {
 private:
-	void Simulate(CTFPlayer* pLocal, CUserCmd* pCmd);
 
-	CMoveData m_tMoveData = {};
+	CMoveData m_MoveData = {};
+
+	int m_nOldTickCount = 0;
+	float m_flOldCurrentTime = 0.f;
+	float m_flOldFrameTime = 0.f;
+
 	DatamapRestore_t m_tLocal = {};
+
 	std::unordered_map<CTFPlayer*, RestoreInfo_t> m_mRestore = {};
 
 public:
 	void Start(CTFPlayer* pLocal, CUserCmd* pCmd);
 	void End(CTFPlayer* pLocal, CUserCmd* pCmd);
+	void Simulate(CTFPlayer* pLocal, CUserCmd* pCmd);
 
 	void Unload();
 
@@ -34,9 +40,11 @@ public:
 
 	bool m_bInPrediction = false;
 
-	int m_nOldTickCount = 0;
-	float m_flOldCurrentTime = 0.f;
-	float m_flOldFrameTime = 0.f;
+	// localplayer use in net_update_end
+	Vec3 m_vOrigin = {};
+	Vec3 m_vVelocity = {};
+	Vec3 m_vDirection = {};
+	Vec3 m_vAngles = {};
 };
 
 ADD_FEATURE(CEnginePrediction, EnginePrediction);

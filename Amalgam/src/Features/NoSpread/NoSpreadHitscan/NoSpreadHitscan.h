@@ -6,7 +6,6 @@
 class CNoSpreadHitscan
 {
 private:
-	bool ShouldRun(CTFWeaponBase* pWeapon = nullptr);
 	int GetSeed(CUserCmd* pCmd);
 	float CalcMantissaStep(float flV);
 	std::string GetFormat(int iServerTime);
@@ -20,6 +19,7 @@ private:
 
 public:
 	void Reset();
+	bool ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, bool bCreateMove = false);
 
 	void AskForPlayerPerf();
 	bool ParsePlayerPerf(const std::string& sMsg);

@@ -15,11 +15,12 @@ public:
 		float flGravityCorrection = 0.f;
 		if (bZ)
 		{
+			static auto sv_gravity = H::ConVars.FindVar("sv_gravity");
 			float flDeltaTicks = float(iDeltaTicks) + 0.5f; // ?
-			flGravityCorrection = (powf(flDeltaTicks, 2.f) - flDeltaTicks) / 2.f * SDK::GetGravity() * powf(TICK_INTERVAL, 2);
+			flGravityCorrection = (powf(flDeltaTicks, 2.f) - flDeltaTicks) / 2.f * sv_gravity->GetFloat() * powf(TICK_INTERVAL, 2);
 		}
 		float flDeltaValue = m_flNewAxisValue - m_flOldAxisValue;
-		float flTickVelocity = flDeltaValue + (flDeltaValue ? PLAYER_ORIGIN_COMPRESSION / 2 * sign(m_flNewAxisValue) : 0.f) - flGravityCorrection;
+		float flTickVelocity = flDeltaValue + (flDeltaValue ? 0.0625f * sign(m_flNewAxisValue) : 0.f) - flGravityCorrection;
 		return flTickVelocity / TICKS_TO_TIME(iDeltaTicks);
 	}
 };
@@ -56,10 +57,13 @@ MAKE_SIGNATURE(CBasePlayer_PostDataUpdate_SetAbsVelocity_Call, "client.dll", "0F
 MAKE_HOOK(CBaseEntity_SetAbsVelocity, S::CBaseEntity_SetAbsVelocity(), void,
 	void* rcx, const Vec3& vecAbsVelocity)
 {
-	DEBUG_RETURN(CBaseEntity_SetAbsVelocity, rcx, vecAbsVelocity);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CBaseEntity_SetAbsVelocity[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, vecAbsVelocity);
+#endif
 
-	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 	const auto dwDesired = S::CBasePlayer_PostDataUpdate_SetAbsVelocity_Call();
+	const auto dwRetAddr = uintptr_t(_ReturnAddress());
 
 	if (dwRetAddr != dwDesired)
 		return CALL_ORIGINAL(rcx, vecAbsVelocity);
@@ -98,10 +102,10 @@ MAKE_HOOK(CBaseEntity_SetAbsVelocity, S::CBaseEntity_SetAbsVelocity(), void,
 		if (i == 2 && bGrounded)
 			break;
 
-		float flOldPos1 = tOldRecord.m_vecOrigin[i], flOldPos2 = flOldPos1 + PLAYER_ORIGIN_COMPRESSION * sign(flOldPos1);
-		float flNewPos1 = tNewRecord.m_vecOrigin[i], flNewPos2 = flNewPos1 + PLAYER_ORIGIN_COMPRESSION * sign(flNewPos1);
-		if (!flOldPos1) flOldPos1 = -PLAYER_ORIGIN_COMPRESSION, flOldPos2 = PLAYER_ORIGIN_COMPRESSION;
-		if (!flNewPos1) flNewPos1 = -PLAYER_ORIGIN_COMPRESSION, flNewPos2 = PLAYER_ORIGIN_COMPRESSION;
+		float flOldPos1 = tOldRecord.m_vecOrigin[i], flOldPos2 = flOldPos1 + 0.125f * sign(flOldPos1);
+		float flNewPos1 = tNewRecord.m_vecOrigin[i], flNewPos2 = flNewPos1 + 0.125f * sign(flNewPos1);
+		if (!flOldPos1) flOldPos1 = -0.125f, flOldPos2 = 0.125f;
+		if (!flNewPos1) flNewPos1 = -0.125f, flNewPos2 = 0.125f;
 
 		FloatRange_t flVelocityRange;
 		{
@@ -119,7 +123,8 @@ MAKE_HOOK(CBaseEntity_SetAbsVelocity, S::CBaseEntity_SetAbsVelocity(), void,
 			FloatRange_t flPositionRange = { tAxisInfo[i].m_flNewAxisValue + flVelocityRange.Max * flRewind, tAxisInfo[i].m_flNewAxisValue + flVelocityRange.Min * flRewind };
 			if (i == 2)
 			{
-				float flGravityCorrection = SDK::GetGravity() * powf(flRewind + TICK_INTERVAL / 2, 2.f) / 2;
+				static auto sv_gravity = H::ConVars.FindVar("sv_gravity");
+				float flGravityCorrection = sv_gravity->GetFloat() * powf(flRewind + TICK_INTERVAL / 2, 2.f) / 2;
 				flPositionRange.Min -= flGravityCorrection, flPositionRange.Max -= flGravityCorrection;
 			}
 			if (flPositionRange.Min > tRecord.m_vecOrigin[i] || tRecord.m_vecOrigin[i] > flPositionRange.Max)

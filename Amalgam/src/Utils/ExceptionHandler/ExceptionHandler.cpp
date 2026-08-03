@@ -10,8 +10,7 @@
 #include <format>
 #pragma comment(lib, "imagehlp.lib")
 
-#define STATUS_RUNTIME_ERROR             ((DWORD   )0xE06D7363L)
-#define DBG_THREAD_NAMING                ((DWORD   )0x406D1388L)
+#define STATUS_RUNTIME_ERROR ((DWORD)0xE06D7363)
 
 struct Frame_t
 {
@@ -25,6 +24,7 @@ struct Frame_t
 
 static PVOID s_pHandle;
 static LPVOID s_lpParam;
+static std::unordered_map<LPVOID, bool> s_mAddresses = {};
 static int s_iExceptions = 0;
 
 static inline std::deque<Frame_t> StackTrace(PCONTEXT pContext)
@@ -80,7 +80,7 @@ static inline std::deque<Frame_t> StackTrace(PCONTEXT pContext)
 		}
 
 		{
-			DWORD64 dwOffset = 0;
+			uintptr_t dwOffset = 0;
 			char buf[sizeof(IMAGEHLP_SYMBOL64) + 255];
 			auto symbol = PIMAGEHLP_SYMBOL64(buf);
 			symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64) + 255;
@@ -89,6 +89,8 @@ static inline std::deque<Frame_t> StackTrace(PCONTEXT pContext)
 				tFrame.m_sName = symbol->Name;
 		}
 	}
+	//if (!vTrace.empty())
+	//	vTrace.pop_front();
 
 	SymCleanup(hProcess);
 
@@ -103,24 +105,24 @@ static LONG APIENTRY ExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
 	case STATUS_ACCESS_VIOLATION: sError = "ACCESS VIOLATION"; break;
 	case STATUS_STACK_OVERFLOW: sError = "STACK OVERFLOW"; break;
 	case STATUS_HEAP_CORRUPTION: sError = "HEAP CORRUPTION"; break;
-	case STATUS_RUNTIME_ERROR:
-	case EXCEPTION_BREAKPOINT:
-	case DBG_PRINTEXCEPTION_C:
-	case DBG_PRINTEXCEPTION_WIDE_C:
-	case DBG_THREAD_NAMING: return EXCEPTION_CONTINUE_SEARCH;
+	case STATUS_RUNTIME_ERROR: sError = "RUNTIME ERROR"; break;
+	case DBG_PRINTEXCEPTION_C: return EXCEPTION_EXECUTE_HANDLER;
 	}
 
-	if (!Vars::Debug::CrashLogging.Value)
-		return EXCEPTION_CONTINUE_SEARCH;
+	if (s_mAddresses.contains(ExceptionInfo->ExceptionRecord->ExceptionAddress)
+		|| !Vars::Debug::CrashLogging.Value
+		|| s_iExceptions && GetAsyncKeyState(VK_SHIFT) & 0x8000 && GetAsyncKeyState(VK_RETURN) & 0x8000)
+		return EXCEPTION_EXECUTE_HANDLER;
+	s_mAddresses[ExceptionInfo->ExceptionRecord->ExceptionAddress];
 
 	std::stringstream ssErrorStream;
 	ssErrorStream << std::format("Error: {} (0x{:X}) ({})\n", sError, ExceptionInfo->ExceptionRecord->ExceptionCode, ++s_iExceptions);
+	if (U::Memory.GetOffsetFromBase(s_lpParam))
+		ssErrorStream << std::format("This: {}\n", U::Memory.GetModuleOffset(s_lpParam));
 	ssErrorStream << "Built @ " __DATE__ ", " __TIME__ ", " __CONFIGURATION__ "\n";
 	ssErrorStream << std::format("Time @ {}, {}\n", SDK::GetDate(), SDK::GetTime());
 
 	ssErrorStream << "\n";
-	if (U::Memory.GetOffsetFromBase(s_lpParam))
-		ssErrorStream << std::format("This: {}\n", U::Memory.GetModuleOffset(s_lpParam));
 	ssErrorStream << std::format("RIP: {:#x}\n", ExceptionInfo->ContextRecord->Rip);
 	ssErrorStream << std::format("RAX: {:#x}\n", ExceptionInfo->ContextRecord->Rax);
 	ssErrorStream << std::format("RCX: {:#x}\n", ExceptionInfo->ContextRecord->Rcx);
@@ -166,7 +168,7 @@ static LONG APIENTRY ExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
 
 		ssErrorStream << "\n";
 		ssErrorStream << "Ctrl + C to copy. \n";
-		ssErrorStream << "Logged to Amalgam\\crash_log.txt. ";
+		ssErrorStream << "Logged to Aletherium\\crash_log.txt. ";
 	}
 	catch (...) {}
 
@@ -175,10 +177,10 @@ static LONG APIENTRY ExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
 	case STATUS_ACCESS_VIOLATION:
 	case STATUS_STACK_OVERFLOW:
 	case STATUS_HEAP_CORRUPTION:
-		SDK::Output("Unhandled exception", ssErrorStream.str().c_str(), {}, OUTPUT_DEBUG, nullptr, MB_OK | MB_ICONERROR);
+		SDK::Output("Unhandled exception", ssErrorStream.str().c_str(), {}, OUTPUT_DEBUG, MB_OK | MB_ICONERROR);
 	}
 
-	return EXCEPTION_CONTINUE_SEARCH;
+	return EXCEPTION_EXECUTE_HANDLER;
 }
 
 void CExceptionHandler::Initialize(LPVOID lpParam)

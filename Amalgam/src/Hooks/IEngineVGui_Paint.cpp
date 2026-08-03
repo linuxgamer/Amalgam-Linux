@@ -1,8 +1,5 @@
 #include "../SDK/SDK.h"
 
-#include "../Features/Visuals/ESP/ESP.h"
-#include "../Features/Visuals/OffscreenArrows/OffscreenArrows.h"
-#include "../Features/Visuals/CameraWindow/CameraWindow.h"
 #include "../Features/Visuals/Visuals.h"
 #include "../Features/Ticks/Ticks.h"
 #include "../Features/CritHack/CritHack.h"
@@ -11,37 +8,40 @@
 #include "../Features/Visuals/PlayerConditions/PlayerConditions.h"
 #include "../Features/NoSpread/NoSpreadHitscan/NoSpreadHitscan.h"
 #include "../Features/Aimbot/Aimbot.h"
-#include "../Features/PacketManip/AntiAim/AntiAim.h"
+#include "../Features/Visuals/ESP/ESP.h"
+#include "../Features/Visuals/OffscreenArrows/OffscreenArrows.h"
+#include "../Features/Visuals/CameraWindow/CameraWindow.h"
+#include "../Features/Visuals/Notifications/Notifications.h"
 #include "../Features/Aimbot/AutoHeal/AutoHeal.h"
-#include "../Features/Debug/Debug.h"
+#include "../Features/Misc/Misc.h"
+#include "../Features/Indicators/Indicators.h"
 
 MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 	void* rcx, int iMode)
 {
-	DEBUG_RETURN(IEngineVGui_Paint, rcx, iMode);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::IEngineVGui_Paint[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, iMode);
+#endif
 
 	if (G::Unload)
 		return CALL_ORIGINAL(rcx, iMode);
 
-	if (iMode & PAINT_UIPANELS)
-	{
-		H::Draw.UpdateKeyStrings();
-	}
-	else if (iMode & PAINT_INGAMEPANELS && !SDK::CleanScreenshot())
+	if (iMode & PAINT_INGAMEPANELS && !SDK::CleanScreenshot())
 	{
 		H::Draw.UpdateScreenSize();
 		H::Draw.UpdateW2SMatrix();
-
 		H::Draw.Start(true);
 		if (auto pLocal = H::Entities.GetLocal())
 		{
 			F::CameraWindow.Draw();
+			F::Visuals.DrawAntiAim(pLocal);
 
-			F::AntiAim.Draw(pLocal);
 			F::Visuals.DrawPickupTimers();
 			F::ESP.Draw();
-			F::OffscreenArrows.Draw(pLocal);
+			F::Arrows.Draw(pLocal);
 			F::Aimbot.Draw(pLocal);
+			F::Misc.Draw(pLocal);
 
 #ifdef DEBUG_VACCINATOR
 			F::AutoHeal.Draw(pLocal);
@@ -52,14 +52,21 @@ MAKE_HOOK(IEngineVGui_Paint, U::Memory.GetVirtual(I::EngineVGui, 14), void,
 			F::SpectatorList.Draw(pLocal);
 			F::CritHack.Draw(pLocal);
 			F::Ticks.Draw(pLocal);
-
-#ifdef DEBUG_INFO
-			F::Debug.Draw(pLocal);
-#endif
+			F::Visuals.DrawDebugInfo(pLocal);
+			F::Indicators.Draw(pLocal);
 		}
 		H::Draw.End();
 	}
 
 	CALL_ORIGINAL(rcx, iMode);
 
+	if (iMode & PAINT_UIPANELS && !SDK::CleanScreenshot())
+	{
+		H::Draw.UpdateScreenSize();
+		H::Draw.Start();
+		{
+			F::Notifications.Draw();
+		}
+		H::Draw.End();
+	}
 }

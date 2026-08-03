@@ -1,6 +1,6 @@
 #include "../SDK/SDK.h"
 
-#include "../SDK/Definitions/Misc/CUtlObjectReference.h"
+#include "../SDK/Definitions/Misc/UtlObjectReference.h"
 
 MAKE_SIGNATURE(COPRenderSprites_Render, "client.dll", "48 89 54 24 ? 55 53 57 41 55 41 56", 0x0);
 MAKE_SIGNATURE(COPRenderSprites_RenderSpriteCard, "client.dll", "48 8B C4 48 89 58 ? 57 41 54", 0x0);
@@ -73,7 +73,10 @@ struct ParticleRenderData_t
 MAKE_HOOK(COPRenderSprites_Render, S::COPRenderSprites_Render(), void,
     void* rcx, IMatRenderContext* pRenderContext, CParticleCollection* pParticles, void* pContext)
 {
-    DEBUG_RETURN(COPRenderSprites_Render, rcx, pRenderContext, pParticles, pContext);
+#ifdef DEBUG_HOOKS
+    if (!Vars::Hooks::COPRenderSprites_Render[DEFAULT_BIND])
+        return CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
+#endif
 
     if (!Vars::Visuals::Effects::DrawIconsThroughWalls.Value || SDK::CleanScreenshot())
         return CALL_ORIGINAL(rcx, pRenderContext, pParticles, pContext);
@@ -163,7 +166,10 @@ MAKE_HOOK(COPRenderSprites_Render, S::COPRenderSprites_Render(), void,
 MAKE_HOOK(COPRenderSprites_RenderSpriteCard, S::COPRenderSprites_RenderSpriteCard(), void,
     void* rcx, void* meshBuilder, void* pCtx, SpriteRenderInfo_t& info, int hParticle, ParticleRenderData_t* pSortList, void* pCamera)
 {
-    DEBUG_RETURN(COPRenderSprites_RenderSpriteCard, rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+#ifdef DEBUG_HOOKS
+    if (!Vars::Hooks::COPRenderSprites_RenderSpriteCard[DEFAULT_BIND])
+        return CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+#endif
 
     if (!(Vars::Visuals::World::Modulations.Value & Vars::Visuals::World::ModulationsEnum::Particle) || SDK::CleanScreenshot())
         return CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
@@ -179,7 +185,10 @@ MAKE_HOOK(COPRenderSprites_RenderSpriteCard, S::COPRenderSprites_RenderSpriteCar
 MAKE_HOOK(COPRenderSprites_RenderTwoSequenceSpriteCard, S::COPRenderSprites_RenderTwoSequenceSpriteCard(), void,
     void* rcx, void* meshBuilder, void* pCtx, SpriteRenderInfo_t& info, int hParticle, ParticleRenderData_t* pSortList, void* pCamera)
 {
-    DEBUG_RETURN(COPRenderSprites_RenderTwoSequenceSpriteCard, rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+#ifdef DEBUG_HOOKS
+    if (!Vars::Hooks::COPRenderSprites_RenderTwoSequenceSpriteCard[DEFAULT_BIND])
+        return CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
+#endif
 
     if (!(Vars::Visuals::World::Modulations.Value &Vars::Visuals::World::ModulationsEnum::Particle) || SDK::CleanScreenshot())
         return CALL_ORIGINAL(rcx, meshBuilder, pCtx, info, hParticle, pSortList, pCamera);
