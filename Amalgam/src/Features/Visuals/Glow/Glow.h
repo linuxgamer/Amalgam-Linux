@@ -6,12 +6,9 @@
 class CGlow
 {
 private:
-	void Begin();
-	void End();
-	void FirstBegin(IMatRenderContext* pRenderContext);
-	void FirstEnd(IMatRenderContext* pRenderContext);
-	void SecondBegin(IMatRenderContext* pRenderContext, int w, int h);
-	void SecondEnd(Glow_t tGlow, IMatRenderContext* pRenderContext, int w, int h);
+	void SetupBegin(IMatRenderContext* pRenderContext);
+	void SetupMid(IMatRenderContext* pRenderContext, int w, int h);
+	void SetupEnd(Glow_t tGlow, IMatRenderContext* pRenderContext, int w, int h);
 
 	void DrawModel(CBaseEntity* pEntity);
 
@@ -25,6 +22,14 @@ private:
 	IMaterial* m_pMatBlurX;
 	IMaterial* m_pMatBlurY;
 	IMaterialVar* m_pBloomAmount;
+
+	// Dedicated buffers/materials for the Model Preview panel's glow. Kept SEPARATE from the shared
+	ITexture* m_pPreviewBuf1 = nullptr;
+	ITexture* m_pPreviewBuf2 = nullptr;
+	IMaterial* m_pMatPreviewBlurX = nullptr;
+	IMaterial* m_pMatPreviewBlurY = nullptr;
+	IMaterial* m_pMatPreviewHalo = nullptr;
+	IMaterialVar* m_pPreviewBloomAmount = nullptr;
 
 
 
@@ -58,12 +63,15 @@ private:
 public:
 
 	void Store(CTFPlayer* pLocal);
-	void RenderFirst();
-	void RenderSecond();
+	void RenderMain();
 	void RenderHandler(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
 
-	void RenderViewmodel(void* rcx, int flags);
+	void RenderViewmodel(void* ecx, int flags);
 	void RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
+
+	// Model Preview: glow an out-of-entity-list entity into the caller's already-pushed RT/3D view.
+	// Runs the same Begin/Mid/End sequence as RenderMain with full-screen buffer dims (so the halo/blur
+	void DrawPreview(CBaseEntity* pEntity, const Glow_t& tGlow, const Color_t& tColor, IMatRenderContext* pRenderContext, int w, int h, float flScale = 1.f);
 
 	void Initialize();
 	void Unload();

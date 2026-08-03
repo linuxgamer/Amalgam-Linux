@@ -4,7 +4,6 @@
 #include "../../Players/PlayerUtils.h"
 #include "../../Misc/Misc.h"
 #include "../../Aimbot/AutoRocketJump/AutoRocketJump.h"
-#include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
 bool CAntiAim::AntiAimOn()
 {
@@ -47,7 +46,7 @@ bool CAntiAim::ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pC
 
 void CAntiAim::FakeShotAngles(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
-	if (!Vars::AntiAim::HidePitchOnShot.Value || G::Attacking != 1 || G::PrimaryWeaponType != EWeaponType::HITSCAN || pLocal->m_MoveType() != MOVETYPE_WALK)
+	if (!Vars::AntiAim::InvalidShootPitch.Value || G::Attacking != 1 || G::PrimaryWeaponType != EWeaponType::HITSCAN || pLocal->m_MoveType() != MOVETYPE_WALK)
 		return;
 
 	switch (pWeapon ? pWeapon->GetWeaponID() : 0)
@@ -131,7 +130,7 @@ float CAntiAim::GetBaseYaw(CTFPlayer* pLocal, CUserCmd* pCmd, bool bFake)
 		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
 		{
 			auto pPlayer = pEntity->As<CTFPlayer>();
-			if (pPlayer->IsDormant() || !pPlayer->IsAlive() || pPlayer->IsAGhost() || F::PlayerUtils.IsIgnored(pPlayer->entindex()))
+			if (!pPlayer->IsAlive() || pPlayer->IsAGhost() || F::PlayerUtils.IsIgnored(pPlayer->entindex()))
 				continue;
 			
 			const Vec3 vAngleTo = Math::CalcAngle(pLocal->m_vecOrigin(), pPlayer->m_vecOrigin());
@@ -149,9 +148,21 @@ float CAntiAim::GetBaseYaw(CTFPlayer* pLocal, CUserCmd* pCmd, bool bFake)
 	return pCmd->viewangles.y;
 }
 
+void CAntiAim::RunOverlapping(CTFPlayer* pEntity, CUserCmd* pCmd, float& flYaw, bool bFake, float flEpsilon)
+{
+	if (!Vars::AntiAim::AntiOverlap.Value || bFake)
+		return;
+
+	float flFakeYaw = GetBaseYaw(pEntity, pCmd, true) + GetYawOffset(pEntity, true);
+	const float flYawDiff = Math::NormalizeAngle(flYaw - flFakeYaw);
+	if (fabsf(flYawDiff) < flEpsilon)
+		flYaw += flYawDiff > 0 ? flEpsilon : -flEpsilon;
+}
+
 float CAntiAim::GetYaw(CTFPlayer* pLocal, CUserCmd* pCmd, bool bFake)
 {
 	float flYaw = GetBaseYaw(pLocal, pCmd, bFake) + GetYawOffset(pLocal, bFake);
+	RunOverlapping(pLocal, pCmd, flYaw, bFake);
 	return flYaw;
 }
 
@@ -229,37 +240,11 @@ void CAntiAim::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd, bo
 	vAngles.x = iAntiBackstab != 2 ? GetPitch(pCmd->viewangles.x) : pCmd->viewangles.x;
 	vAngles.y = !iAntiBackstab ? GetYaw(pLocal, pCmd, bSendPacket) : pCmd->viewangles.y;
 
-	if (F::AntiCheatCompatibility.Active())
+	if (Vars::Misc::Game::AntiCheatCompatibility.Value)
 		Math::ClampAngles(vAngles);
 	SDK::FixMovement(pCmd, vAngles);
 	pCmd->viewangles.x = vAngles.x;
 	pCmd->viewangles.y = vAngles.y;
 
 	MinWalk(pLocal, pCmd);
-}
-
-void CAntiAim::Draw(CTFPlayer* pLocal)
-{
-	if (!pLocal->IsAlive() || pLocal->IsAGhost() || !I::Input->CAM_IsThirdPerson() || !AntiAimOn())
-		return;
-
-	if (Vars::AntiAim::AntiAimLines.Value)
-	{
-		const auto& vOrigin = pLocal->GetAbsOrigin();
-
-		Vec3 vScreen1, vScreen2;
-		if (SDK::W2S(vOrigin, vScreen1))
-		{
-			if (SDK::W2S(vOrigin + Math::RotatePoint({ 50, 0, 0 }, {}, { 0, vRealAngles.y, 0 }), vScreen2))
-				H::Draw.Line(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, { 0, 255, 0, 255 });
-			if (SDK::W2S(vOrigin + Math::RotatePoint({ 50, 0, 0 }, {}, { 0, vFakeAngles.y, 0 }), vScreen2))
-				H::Draw.Line(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, { 255, 0, 0, 255 });
-		}
-
-		for (auto& vPair : vEdgeTrace)
-		{
-			if (SDK::W2S(vPair.first, vScreen1) && SDK::W2S(vPair.second, vScreen2))
-				H::Draw.Line(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, { 255, 255, 255, 255 });
-		}
-	}
 }

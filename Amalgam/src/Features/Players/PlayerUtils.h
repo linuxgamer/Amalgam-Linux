@@ -9,13 +9,6 @@
 #define F2P_TAG (PARTY_TAG-1)
 #define TAG_COUNT (-F2P_TAG)
 
-#define LOCAL "Local"
-#define FRIEND "Friend"
-#define PARTY "Party"
-#define ENEMY "Enemy"
-#define TEAMMATE "Teammate"
-#define PLAYER "Player"
-
 struct ListPlayer
 {
 	std::string m_sName;
@@ -43,7 +36,8 @@ struct PriorityLabel_t
 	bool m_bLocked = false; // don't allow it to be removed
 };
 
-Enum(NameType, None = 0, Local = 1 << 0, Friend = 1 << 1, Party = 1 << 2, Player = 1 << 3, Custom = 1 << 4, Privacy = Local | Friend | Party | Player);
+// the reference name changer masks OTHER players' names only (Player type) - it must NOT hide their
+Enum(NameType, None = 0, Local = 1 << 0, Friend = 1 << 1, Party = 1 << 2, Player = 1 << 3, Custom = 1 << 4, Privacy = Local | Friend | Party);
 
 class CPlayerlistUtils
 {
@@ -120,12 +114,15 @@ public:
 	bool IsPrioritized(uint32_t uAccountID);
 	bool IsPrioritized(int iIndex);
 
+	// the reference name cycler. GetCycledLocalName returns the current cycle entry for the
+	// local player (advancing on a timer when the trigger is Timer), or nullptr when cycling is off
+	const char* GetCycledLocalName();
+	void AdvanceNameCycle();
+
 	int GetNameType(int iIndex);
 	int GetNameType(uint32_t uAccountID);
 	const char* GetPlayerName(int iIndex, const char* sDefault, int* pType = nullptr);
 	const char* GetPlayerName(uint32_t uAccountID, const char* sDefault, int* pType = nullptr);
-	const char* GetPlayerName(int iIndex);
-	const char* GetPlayerName(uint32_t uAccountID);
 
 	std::vector<int>& GetPlayerTags(uint32_t uAccountID) { return m_mPlayerTags.contains(uAccountID) ? m_mPlayerTags[uAccountID] : m_vDummy; }
 	std::string* GetPlayerAlias(uint32_t uAccountID) { return m_mPlayerAliases.contains(uAccountID) ? &m_mPlayerAliases[uAccountID] : nullptr; }

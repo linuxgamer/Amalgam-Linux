@@ -1,6 +1,7 @@
 #pragma once
 #include "CBaseEntity.h"
 #include "../Misc/IGameResources.h"
+#include "../Misc/String.h"
 
 #define PLAYER_UNCONNECTED_NAME	"unconnected"
 #define PLAYER_ERROR_NAME "ERRORNAME"
@@ -20,14 +21,6 @@ public:
 	NETVAR_ARRAY(m_iUserID, int, "CPlayerResource", "m_iUserID");
 
 	NETVAR_ARRAY_OFF(m_szName, const char*, "CPlayerResource", "m_iPing", -816);
-	
-	inline bool IsValid(int iIndex)
-	{
-		if (iIndex < 0 || iIndex > MAX_PLAYERS)
-			return false;
-
-		return m_bValid(iIndex);
-	}
 
 	inline bool IsFakePlayer(int iIndex, bool bPlayerInfo = false)
 	{

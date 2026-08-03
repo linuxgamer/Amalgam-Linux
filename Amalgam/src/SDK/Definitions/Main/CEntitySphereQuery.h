@@ -1,23 +1,20 @@
 #pragma once
 #include "../Definitions.h"
-#include "../../../Utils/Signatures/Signatures.h"
+#include "CBaseEntity.h"
 
-#pragma warning (push)
+#define MAX_SPHERE_QUERY	512
+
 #pragma warning (disable : 26495)
 
 MAKE_SIGNATURE(CEntitySphereQuery, "client.dll", "40 53 48 83 EC ? 48 8B D9 C7 44 24 ? ? ? ? ? 33 C9", 0x0);
 
-#define MAX_SPHERE_QUERY	512
-
-class CBaseEntity;
-
-// credits to KGB
+//credits to KGB
 class CEntitySphereQuery
 {
 public:
 	CEntitySphereQuery(const Vec3& center, const float radius, const int flagMask = 0, const int partitionMask = PARTITION_CLIENT_NON_STATIC_EDICTS)
 	{
-		S::CEntitySphereQuery.Call<CEntitySphereQuery*>(this, std::ref(center), radius, flagMask, partitionMask);
+		S::CEntitySphereQuery.Call<void>(this, std::ref(center), radius, flagMask, partitionMask);
 	}
 
 	inline CBaseEntity* GetCurrentEntity()
@@ -34,5 +31,3 @@ private:
 	int m_nListIndex, m_nListCount;
 	CBaseEntity* m_pList[MAX_SPHERE_QUERY];
 };
-
-#pragma warning (pop)

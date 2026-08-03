@@ -31,49 +31,19 @@ public:
 	}
 };
 
-#ifndef DEBUG_HOOKS
-	#define MAKE_HOOK(name, address, type, ...) \
-	namespace Hooks \
+#define MAKE_HOOK(name, address, type, ...) \
+namespace Hooks \
+{ \
+	namespace name \
 	{ \
-		namespace name \
-		{ \
-			void Init(); \
-			inline CHook Hook(#name, Init); \
-			using FN = type(__fastcall*)(__VA_ARGS__); \
-			type __fastcall Func(__VA_ARGS__); \
-		} \
+		void Init(); \
+		inline CHook Hook(#name, Init); \
+		using FN = type(__fastcall*)(__VA_ARGS__); \
+		type __fastcall Func(__VA_ARGS__); \
 	} \
-	void Hooks::name::Init() { Hook.Create(reinterpret_cast<void*>(address), Func); } \
-	type __fastcall Hooks::name::Func(__VA_ARGS__)
-
-	#define DEBUG_RETURN()
-#else
-	#define DEBUG_VAR(name) \
-	namespace Vars { \
-		namespace Hooks { \
-			inline ConfigVar<bool> name = { true, { #name }, "Vars::Hooks::"#name##"_", "Hooks", NOSAVE | DEBUGVAR }; \
-		} \
-	}
-
-	#define MAKE_HOOK(name, address, type, ...) \
-	DEBUG_VAR(name) \
-	namespace Hooks \
-	{ \
-		namespace name \
-		{ \
-			void Init(); \
-			inline CHook Hook(#name, Init); \
-			using FN = type(__fastcall*)(__VA_ARGS__); \
-			type __fastcall Func(__VA_ARGS__); \
-		} \
-	} \
-	void Hooks::name::Init() { Hook.Create(reinterpret_cast<void*>(address), Func); } \
-	type __fastcall Hooks::name::Func(__VA_ARGS__)
-
-	#define DEBUG_RETURN(hook, ...) \
-		if (!Vars::Hooks::hook[DEFAULT_BIND]) \
-			return CALL_ORIGINAL(__VA_ARGS__);
-#endif
+} \
+void Hooks::name::Init() { Hook.Create(reinterpret_cast<void*>(address), Func); } \
+type __fastcall Hooks::name::Func(__VA_ARGS__)
 
 #define CALL_ORIGINAL Hook.As<FN>()
 

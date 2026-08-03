@@ -1,8 +1,10 @@
 #pragma once
 #include "CBaseHandle.h"
 #include "IClientEntity.h"
+#include "CCollisionProperty.h"
+#include "CParticleProperty.h"
+#include "../Main/UtlVector.h"
 #include "../Misc/CInterpolatedVar.h"
-#include "../Misc/CUtlVector.h"
 #include "../Definitions.h"
 #include "../../../Utils/Memory/Memory.h"
 #include "../../../Utils/Signatures/Signatures.h"
@@ -27,8 +29,6 @@ typedef CHandle<CBaseEntity> EHANDLE;
 #define MULTIPLAYER_BACKUP 90
 
 class IInterpolatedVar;
-class CCollisionProperty;
-class CParticleProperty;
 
 class VarMapEntry_t
 {
@@ -92,13 +92,13 @@ public:
 	NETVAR(movetype, int, "CBaseEntity", "movetype");
 	
 	NETVAR_OFF(m_flOldSimulationTime, float, "CBaseEntity", "m_flSimulationTime", 4);
-	NETVAR_OFF_EMBED(m_Particles, CParticleProperty*, "CBaseEntity", "m_flElasticity", -56);
-	NETVAR_OFF(m_iv_angRotation, CInterpolatedVar<Vec3>, "CBaseEntity", "m_vecOrigin", -128);
-	NETVAR_OFF(m_iv_vecVelocity, CInterpolatedVar<Vec3>, "CBaseEntity", "m_iTeamNum", 156);
-	NETVAR_OFF(m_iv_vecOrigin, CInterpolatedVar<Vec3>, "CBaseEntity", "m_flShadowCastDistance", 84);
 	NETVAR_OFF(m_MoveType, byte, "CTFPlayer", "m_nWaterLevel", -4);
 	NETVAR_OFF(m_MoveCollide, byte, "CTFPlayer", "m_nWaterLevel", -3);
 	NETVAR_OFF(m_nWaterType, byte, "CTFPlayer", "m_nWaterLevel", 1);
+	NETVAR_EMBED_OFF(m_Particles, CParticleProperty*, "CBaseEntity", "m_flElasticity", -56);
+	NETVAR_OFF(m_iv_vecVelocity, CInterpolatedVar<Vec3>, "CBaseEntity", "m_iTeamNum", 156);
+	NETVAR_OFF(m_iv_vecOrigin, CInterpolatedVar<Vec3>, "CBaseEntity", "m_flShadowCastDistance", 84);
+	NETVAR_OFF(m_iv_angRotation, CInterpolatedVar<Vec3>, "CBaseEntity", "m_vecOrigin", -128);
 	inline CBaseEntity* GetMoveParent()
 	{
 		static int nOffset = U::NetVars.GetNetVar("CBaseEntity", "moveparent") - 8;
@@ -134,10 +134,6 @@ public:
 		return ent;
 	}
 
-	inline bool IsValid()
-	{
-		return entindex() != -1;
-	}
 	inline bool IsPlayer()
 	{
 		return GetClassID() == ETFClassID::CTFPlayer;
@@ -268,21 +264,6 @@ public:
 		}
 		return false;
 	}
-	inline bool IsWearableVM()
-	{
-		return GetClassID() == ETFClassID::CTFWearableVM;
-	}
-	inline bool IsViewmodel()
-	{
-		switch (GetClassID())
-		{
-		case ETFClassID::CBaseViewModel:
-		case ETFClassID::CTFViewModel:
-		case ETFClassID::CTFWearableVM:
-			return true;
-		}
-		return false;
-	}
 
 	VIRTUAL(GetPredDescMap, datamap_t*, 15, this);
 	//VIRTUAL(IsPlayer, bool, 132, this);
@@ -310,12 +291,10 @@ public:
 	}
 
 	int GetIntermediateDataSize();
-	Vec3 GetOrigin(float flCompression);
 	Vec3 GetSize();
 	Vec3 GetOffset();
 	Vec3 GetCenter();
 	Vec3 GetRenderCenter();
-	studiohdr_t* GetStudiomodel();
 	int IsInValidTeam();
 	int SolidMask();
 	int GetHitboxToBase(int nHitbox);

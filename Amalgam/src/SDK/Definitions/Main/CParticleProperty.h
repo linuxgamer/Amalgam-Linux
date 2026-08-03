@@ -1,5 +1,5 @@
 #pragma once
-#include "../Misc/CUtlVector.h"
+#include "UtlVector.h"
 
 class CBaseEntity;
 struct ParticleEffectList_t;

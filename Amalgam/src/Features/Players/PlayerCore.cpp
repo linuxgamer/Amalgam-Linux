@@ -18,8 +18,6 @@ void CPlayerlistCore::SavePlayerlist()
 	if (!F::PlayerUtils.m_bSave || F::PlayerUtils.m_bLoad) // terrible if we end up saving while loading
 		return;
 
-	F::PlayerUtils.m_bSave = false;
-
 	try
 	{
 		boost::property_tree::ptree tWrite;
@@ -74,11 +72,12 @@ void CPlayerlistCore::SavePlayerlist()
 
 		write_json(F::Configs.m_sCorePath + "Players.json", tWrite);
 
-		SDK::Output("Amalgam", "Saved playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+		F::PlayerUtils.m_bSave = false;
+		SDK::Output("chudhook", "Saved playerlist", DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Save playerlist failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("chudhook", "Save playerlist failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
 	}
 }
 
@@ -132,14 +131,14 @@ void CPlayerlistCore::LoadPlayerlist()
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Playerlist config not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("chudhook", "Playerlist config not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
 
 		if (auto tSub = tRead.get_child_optional("Tags"))
 		{
 			for (auto& [sName, tChild] : *tSub)
 			{
 				uint32_t uAccountID = std::stoul(sName);
-				for (auto& tTag : tChild | std::views::values)
+				for (auto& [_, tTag] : tChild)
 				{
 					const std::string& sTag = tTag.data();
 
@@ -154,7 +153,7 @@ void CPlayerlistCore::LoadPlayerlist()
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Playerlist tags not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("chudhook", "Playerlist tags not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
 
 		if (auto tSub = tRead.get_child_optional("Aliases"))
 		{
@@ -168,14 +167,13 @@ void CPlayerlistCore::LoadPlayerlist()
 			}
 		}
 		else
-			SDK::Output("Amalgam", "Playerlist aliases not found", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+			SDK::Output("chudhook", "Playerlist aliases not found", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
 
-		SDK::Output("Amalgam", "Loaded playerlist", INFO_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_INFO);
+		F::PlayerUtils.m_bLoad = false;
+		SDK::Output("chudhook", "Loaded playerlist", DEFAULT_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG);
 	}
 	catch (...)
 	{
-		SDK::Output("Amalgam", "Load playerlist failed", ERROR_COLOR, OUTPUT_CONSOLE | OUTPUT_TOAST | OUTPUT_MENU | OUTPUT_DEBUG, ICON_MD_CANCEL);
+		SDK::Output("chudhook", "Load playerlist failed", ALTERNATE_COLOR, OUTPUT_CONSOLE | OUTPUT_MENU | OUTPUT_DEBUG);
 	}
-
-	F::PlayerUtils.m_bLoad = false;
 }

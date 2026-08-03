@@ -4,20 +4,64 @@
 #include "../Features/Visuals/Glow/Glow.h"
 #include "../Features/Visuals/Materials/Materials.h"
 #include "../Features/Visuals/CameraWindow/CameraWindow.h"
+#include "../Features/Visuals/ModelPreview/ModelPreview.h"
 
+// Cosmetic-hat detection by model path.
+// Cosmetics live under models/player/items (+ workshop variants); functional
+static bool IsCosmeticHatModel(const char* szModel)
+{
+	if (!szModel)
+		return false;
+
+	static const char* kExceptions[] = {
+		"player/items/sniper/knife_shield",
+		"player/items/demo/pegleg",
+		"player/items/demo/demo_booties",
+		"player/items/sniper/xms_sniper_commandobackpack",
+		"player/items/sniper/croc_shield",
+		"_zombie.mdl",
+		nullptr
+	};
+	for (int i = 0; kExceptions[i]; ++i)
+		if (strstr(szModel, kExceptions[i]))
+			return false;
+
+	static const char* kHatDirs[] = {
+		"models/player/items",
+		"models/workshop/player/items",
+		"models/workshop_partner/player/items",
+		nullptr
+	};
+	for (int i = 0; kHatDirs[i]; ++i)
+		if (strstr(szModel, kHatDirs[i]))
+			return true;
+
+	return false;
+}
+
+MAKE_SIGNATURE(CBaseAnimating_DrawModel, "client.dll", "4C 8B DC 49 89 5B ? 89 54 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 83 EC ? 48 8B 05 ? ? ? ? 48 8D 3D", 0x0);
+MAKE_SIGNATURE(CEconEntity_DrawOverriddenViewmodel_DrawModel_Call, "client.dll", "41 8B D5 FF 50 ? 8B 97", 0x6);
 MAKE_SIGNATURE(CBaseAnimating_InternalDrawModel, "client.dll", "48 8B C4 55 56 48 8D 6C 24 ? 48 81 EC ? ? ? ? 44 8B 81", 0x0);
-MAKE_SIGNATURE(CBaseViewModel_DrawModel, "client.dll", "40 53 55 56 48 83 EC ? 80 B9", 0x0);
-
-static bool s_bDrawingViewmodel = false;
 
 MAKE_HOOK(IVModelRender_DrawModelExecute, U::Memory.GetVirtual(I::ModelRender, 19), void,
 	void* rcx, const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld)
 {
-	DEBUG_RETURN(IVModelRender_DrawModelExecute, rcx, pState, pInfo, pBoneToWorld);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::IVModelRender_DrawModelExecute[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
+#endif
 
 	if (I::EngineVGui->IsGameUIVisible() || SDK::CleanScreenshot()
-		|| F::CameraWindow.m_bDrawing || !F::Materials.m_bLoaded || G::Unload)
+		|| F::CameraWindow.m_bDrawing || F::ModelPreview.m_bDrawing || !F::Materials.m_bLoaded || G::Unload)
 		return CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
+
+	if (Vars::Visuals::Removals::Cosmetics.Value && pInfo.pModel)
+	{
+		auto pWearable = I::ClientEntityList->GetClientEntity(pInfo.entity_index);
+		if (pWearable && pWearable->As<CBaseEntity>()->IsWearable()
+			&& IsCosmeticHatModel(I::ModelInfoClient->GetModelName(pInfo.pModel)))
+			return;
+	}
 
 	if (F::Chams.m_bRendering)
 		return F::Chams.RenderHandler(pState, pInfo, pBoneToWorld);
@@ -27,8 +71,9 @@ MAKE_HOOK(IVModelRender_DrawModelExecute, U::Memory.GetVirtual(I::ModelRender, 1
 	if (F::Chams.m_mEntities.contains(pInfo.entity_index))
 		return;
 
-	auto pEntity = I::ClientEntityList->GetClientEntity(pInfo.entity_index)->As<CBaseEntity>();
-	if (pEntity && pEntity->IsWearableVM() /*pEntity->IsViewmodel()*/)
+	auto pEntity = I::ClientEntityList->GetClientEntity(pInfo.entity_index);
+	auto pRenderContext = I::MaterialSystem->GetRenderContext();
+	if (pEntity && pRenderContext && pEntity->GetClassID() == ETFClassID::CTFViewModel)
 	{
 		F::Glow.RenderViewmodel(pState, pInfo, pBoneToWorld);
 		if (F::Chams.RenderViewmodel(pState, pInfo, pBoneToWorld))
@@ -38,12 +83,42 @@ MAKE_HOOK(IVModelRender_DrawModelExecute, U::Memory.GetVirtual(I::ModelRender, 1
 	CALL_ORIGINAL(rcx, pState, pInfo, pBoneToWorld);
 }
 
+static bool s_bDrawingViewmodel = false;
+
+MAKE_HOOK(CBaseAnimating_DrawModel, S::CBaseAnimating_DrawModel(), int,
+	void* rcx, int flags)
+{
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CBaseAnimating_DrawModel[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, flags);
+#endif
+
+	const auto dwDesired = S::CEconEntity_DrawOverriddenViewmodel_DrawModel_Call();
+	const auto dwRetAddr = uintptr_t(_ReturnAddress());
+
+	if (dwRetAddr != dwDesired || I::EngineVGui->IsGameUIVisible() || SDK::CleanScreenshot()
+		|| F::CameraWindow.m_bDrawing || !F::Materials.m_bLoaded || G::Unload)
+		return CALL_ORIGINAL(rcx, flags);
+
+	s_bDrawingViewmodel = true;
+	int iReturn = CALL_ORIGINAL(rcx, flags);
+	s_bDrawingViewmodel = false;
+	return iReturn;
+}
+
 MAKE_HOOK(CBaseAnimating_InternalDrawModel, S::CBaseAnimating_InternalDrawModel(), int,
 	void* rcx, int flags)
 {
-	DEBUG_RETURN(CBaseAnimating_InternalDrawModel, rcx, flags);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::IVModelRender_DrawModelExecute[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, flags);
+#endif
 
-	if (!s_bDrawingViewmodel /*|| !(flags & STUDIO_RENDER)*/)
+	if (!s_bDrawingViewmodel || !(flags & STUDIO_RENDER))
+		return CALL_ORIGINAL(rcx, flags);
+
+	auto pRenderContext = I::MaterialSystem->GetRenderContext();
+	if (!pRenderContext)
 		return CALL_ORIGINAL(rcx, flags);
 
 	int iReturn;
@@ -52,19 +127,4 @@ MAKE_HOOK(CBaseAnimating_InternalDrawModel, S::CBaseAnimating_InternalDrawModel(
 		return iReturn;
 
 	return CALL_ORIGINAL(rcx, 1);
-}
-
-MAKE_HOOK(CBaseViewModel_DrawModel, S::CBaseViewModel_DrawModel(), int,
-	void* rcx, int flags)
-{
-	DEBUG_RETURN(CBaseAnimating_DrawModel, rcx, flags);
-
-	if (s_bDrawingViewmodel || I::EngineVGui->IsGameUIVisible() || SDK::CleanScreenshot()
-		|| F::CameraWindow.m_bDrawing || !F::Materials.m_bLoaded || G::Unload)
-		return CALL_ORIGINAL(rcx, flags);
-
-	s_bDrawingViewmodel = true;
-	int iReturn = CALL_ORIGINAL(rcx, flags);
-	s_bDrawingViewmodel = false;
-	return iReturn;
 }

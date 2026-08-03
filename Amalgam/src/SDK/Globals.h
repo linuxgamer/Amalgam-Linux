@@ -58,14 +58,6 @@ struct DrawSwept_t
 	bool m_bZBuffer = false;
 };
 
-struct DrawTriangle_t
-{
-	std::array<Vec3, 3> m_aOrigin;
-	float m_flTime;
-	Color_t m_tColor;
-	bool m_bZBuffer = false;
-};
-
 struct AimTarget_t
 {
 	int m_iEntIndex = 0;
@@ -91,14 +83,12 @@ namespace G
 	inline bool CanHeadshot = false;
 	inline int Throwing = false;
 	inline float Lerp = 0.015f;
-	inline float FOV = 90.f;
 
 	inline EWeaponType PrimaryWeaponType = {}, SecondaryWeaponType = {};
 
 	inline CUserCmd* CurrentUserCmd = nullptr;
 	inline CUserCmd* LastUserCmd = nullptr;
 	inline CUserCmd OriginalCmd = {};
-	inline CUserCmd DummyCmd = {};
 
 	inline AimTarget_t AimTarget = {};
 	inline AimPoint_t AimPoint = {};
@@ -106,22 +96,38 @@ namespace G
 	inline bool SilentAngles = false;
 	inline bool PSilentAngles = false;
 
+	// Clean POV demos (primary fix): latest real engine view angle, stashed each CreateMove. The
+	// CPrediction::GetLocalViewAngles hook hands this back while a demo records so the demo cmdinfo /
+	// first-person camera follows the real view instead of the silent/backstab angle.
+	inline Vec3 RealViewAngles = {};
+
+	// Fake POV (Movement > FAKE POV): smoothed demo-camera angle offset (x = pitch, y = yaw), published
+	// each frame by F::FakePOV and added on top of RealViewAngles by the CPrediction::GetLocalViewAngles
+	// hook while a demo records. Active = the feature is on OR the offset is still easing back to rest.
+	inline Vec3 FakePOVOffset = {};
+	inline bool FakePOVActive = false;
+
 	inline bool AntiAim = false;
 	inline bool Choking = false;
 
 	inline bool UpdatingAnims = false;
 	inline bool FlipViewmodels = false;
 
+	// Flip world (Visuals > World > Flip world): set true each command tick by CMisc::RunPre while the
+	// feature is on and the local player is alive. Read by CFlipWorld::Render (the horizontal
+	// screen-space mirror of the world frame, done in the DoPostScreenSpaceEffects pass) and by
+	// CMisc::FlipWorldInput (mirrors the controls). Latched at command rate; the render reads it.
+	inline bool FlipWorldActive = false;
+
 	inline std::vector<DrawLine_t> LineStorage = {};
 	inline std::vector<DrawPath_t> PathStorage = {};
 	inline std::vector<DrawBox_t> BoxStorage = {};
 	inline std::vector<DrawSphere_t> SphereStorage = {};
 	inline std::vector<DrawSwept_t> SweptStorage = {};
-	inline std::vector<DrawTriangle_t> TriangleStorage = {};
 
-	inline int& RandomSeed()
+	inline int* RandomSeed()
 	{
-		static auto& pRandomSeed = *reinterpret_cast<int*>(U::Memory.RelToAbs(S::RandomSeed()));
+		static auto pRandomSeed = reinterpret_cast<int*>(U::Memory.RelToAbs(S::RandomSeed()));
 		return pRandomSeed;
 	}
 };

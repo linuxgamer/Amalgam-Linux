@@ -1,8 +1,9 @@
 #pragma once
 #include "Interface.h"
 
-class KeyValues;
 typedef unsigned long StringIndex_t;
+
+class KeyValues;
 
 class ILocalize
 {

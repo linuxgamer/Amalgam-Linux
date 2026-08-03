@@ -365,6 +365,84 @@ static inline bool ShouldTarget(Group_t& tGroup, CBaseEntity* pEntity, CTFPlayer
 
 
 
+// Applies the fixed name + targeting for a given section onto a Group_t.
+static inline void SetSectionTargeting(Group_t& tGroup, int iSection)
+{
+	switch (iSection)
+	{
+	case SectionEnum::Enemies:
+		tGroup.m_sName = "Enemies";
+		tGroup.m_iTargets = TargetsEnum::Players;
+		tGroup.m_iConditions = ConditionsEnum::Enemy | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	case SectionEnum::EnemyBuildings:
+		tGroup.m_sName = "Enemy buildings";
+		tGroup.m_iTargets = TargetsEnum::Buildings;
+		tGroup.m_iConditions = ConditionsEnum::Enemy | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	case SectionEnum::Teammates:
+		tGroup.m_sName = "Teammates";
+		tGroup.m_iTargets = TargetsEnum::Players;
+		tGroup.m_iConditions = ConditionsEnum::Team | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	case SectionEnum::TeammateBuildings:
+		tGroup.m_sName = "Teammate buildings";
+		tGroup.m_iTargets = TargetsEnum::Buildings;
+		tGroup.m_iConditions = ConditionsEnum::Team | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	case SectionEnum::ViewmodelWeapon:
+		tGroup.m_sName = "Viewmodel weapon";
+		tGroup.m_iTargets = TargetsEnum::ViewmodelWeapon;
+		tGroup.m_iConditions = ConditionsEnum::Local;
+		break;
+	case SectionEnum::ViewmodelArms:
+		tGroup.m_sName = "Viewmodel arms";
+		tGroup.m_iTargets = TargetsEnum::ViewmodelHands;
+		tGroup.m_iConditions = ConditionsEnum::Local;
+		break;
+	case SectionEnum::Projectiles:
+		tGroup.m_sName = "Projectiles";
+		tGroup.m_iTargets = TargetsEnum::Projectiles;
+		tGroup.m_iConditions = ConditionsEnum::Enemy | ConditionsEnum::Team | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	case SectionEnum::Pickups:
+		tGroup.m_sName = "Pickups";
+		tGroup.m_iTargets = TargetsEnum::Health | TargetsEnum::Ammo | TargetsEnum::Money | TargetsEnum::Powerups
+			| TargetsEnum::Spellbook | TargetsEnum::Bombs | TargetsEnum::Gargoyle | TargetsEnum::NPCs;
+		tGroup.m_iConditions = ConditionsEnum::Enemy | ConditionsEnum::Team | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	case SectionEnum::Intel:
+		tGroup.m_sName = "Intel";
+		tGroup.m_iTargets = TargetsEnum::Objective;
+		tGroup.m_iConditions = ConditionsEnum::Enemy | ConditionsEnum::Team | ConditionsEnum::BLU | ConditionsEnum::RED;
+		break;
+	}
+
+	// the fixed sections do not use the sub-class/projectile filters - everything passes
+	tGroup.m_iPlayers = 0;
+	tGroup.m_iBuildings = 0;
+	tGroup.m_iProjectiles = 0;
+}
+
+void CGroups::Init()
+{
+	m_vGroups.clear();
+	m_vGroups.resize(SectionEnum::Count);
+	for (int i = 0; i < SectionEnum::Count; i++)
+		SetSectionTargeting(m_vGroups[i], i);
+}
+
+void CGroups::ReassertTargets()
+{
+	if (m_vGroups.size() != SectionEnum::Count)
+	{
+		Init();
+		return;
+	}
+	for (int i = 0; i < SectionEnum::Count; i++)
+		SetSectionTargeting(m_vGroups[i], i);
+}
+
 void CGroups::Store(CTFPlayer* pLocal)
 {
 	m_mEntities.clear();
@@ -419,7 +497,7 @@ bool CGroups::GetGroup(CBaseEntity* pEntity, CTFPlayer* pLocal, Group_t*& pGroup
 	{
 		auto& tGroup = m_vGroups[i];
 
-		if (!(Vars::ESP::ActiveGroups.Value & 1 << i))
+		if (!tGroup.m_bEnabled)
 			continue;
 
 		if (!ShouldTarget(tGroup, pEntity, pLocal, bModels))
@@ -441,7 +519,7 @@ bool CGroups::GetGroup(int iType, Group_t*& pGroup, CBaseEntity* pEntity)
 	{
 		auto& tGroup = m_vGroups[i];
 
-		if (!(Vars::ESP::ActiveGroups.Value & 1 << i))
+		if (!tGroup.m_bEnabled)
 			continue;
 
 		if (!(tGroup.m_iTargets & iType) || pEntity && (tGroup.m_iConditions & ConditionsEnum::Dormant ? !pEntity->IsDormant() : pEntity->IsDormant()))
@@ -463,7 +541,7 @@ bool CGroups::GetGroup(int iType)
 	{
 		auto& tGroup = m_vGroups[i];
 
-		if (!(Vars::ESP::ActiveGroups.Value & 1 << i))
+		if (!tGroup.m_bEnabled)
 			continue;
 
 		if (!(tGroup.m_iTargets & iType))
@@ -498,7 +576,12 @@ Color_t CGroups::GetColor(CBaseEntity* pEntity, Group_t* pGroup)
 
 bool CGroups::GroupsActive()
 {
-	return Vars::ESP::ActiveGroups.Value && !m_vGroups.empty();
+	for (auto& tGroup : m_vGroups)
+	{
+		if (tGroup.m_bEnabled)
+			return true;
+	}
+	return false;
 }
 
 void CGroups::Move(int i1, int i2)

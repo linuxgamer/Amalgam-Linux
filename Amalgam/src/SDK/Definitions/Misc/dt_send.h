@@ -1,9 +1,21 @@
-#pragma once
-#include "dt_common.h"
-#include "bitvec.h"
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//
+// Purpose: 
+//
+// $NoKeywords: $
+//
+//=============================================================================//
 
 #ifndef DATATABLE_SEND_H
 #define DATATABLE_SEND_H
+
+#ifdef _WIN32
+#pragma once
+#endif
+
+#include "dt_common.h"
+#include "bitvec.h"
+
 #define ABSOLUTE_PLAYER_LIMIT 255
 #define SP_MODEL_INDEX_BITS 13
 

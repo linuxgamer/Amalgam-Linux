@@ -1,7 +1,6 @@
 #pragma once
+#include "KeyValues.h"
 #include "../Steam/SteamClientPublic.h"
-
-class KeyValues;
 
 class CEconNotification
 {

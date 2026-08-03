@@ -1,7 +1,6 @@
 #include "NoSpreadHitscan.h"
 
 #include "../../Ticks/Ticks.h"
-#include "../../AntiCheatCompatibility/AntiCheatCompatibility.h"
 #include <regex>
 #include <numeric>
 
@@ -20,17 +19,13 @@ void CNoSpreadHitscan::Reset()
 	m_bSynced = false;
 }
 
-bool CNoSpreadHitscan::ShouldRun(CTFWeaponBase* pWeapon)
+bool CNoSpreadHitscan::ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, bool bCreateMove)
 {
-	if (pWeapon
-		? G::PrimaryWeaponType != EWeaponType::HITSCAN || pWeapon->GetWeaponSpread() <= 0.f
-		: !Vars::Aimbot::General::NoSpread.Value || !I::EngineClient->IsInGame())
+	if (G::PrimaryWeaponType != EWeaponType::HITSCAN
+		|| (bCreateMove ? pWeapon->GetWeaponSpread() : S::CTFWeaponBaseGun_GetWeaponSpread.Call<float>(pWeapon)) <= 0.f)
 		return false;
 
-	if (F::AntiCheatCompatibility.Active())
-		return false;
-
-	return true;
+	return bCreateMove ? G::Attacking == 1 : true;
 }
 
 int CNoSpreadHitscan::GetSeed(CUserCmd* pCmd)
@@ -71,7 +66,7 @@ std::string CNoSpreadHitscan::GetFormat(int iServerTime)
 
 void CNoSpreadHitscan::AskForPlayerPerf()
 {
-	if (!ShouldRun())
+	if (!Vars::Aimbot::General::NoSpread.Value || !I::EngineClient->IsInGame())
 		return Reset();
 
 	if (G::Choking)
@@ -88,17 +83,17 @@ void CNoSpreadHitscan::AskForPlayerPerf()
 
 bool CNoSpreadHitscan::ParsePlayerPerf(const std::string& sMsg)
 {
-	if (!ShouldRun())
+	if (!Vars::Aimbot::General::NoSpread.Value)
 		return false;
 
-	std::smatch tMatch; std::regex_match(sMsg, tMatch, std::regex(R"((\d+.\d+)\s\d+\s\d+\s\d+.\d+\s\d+.\d+\svel\s\d+.\d+)"));
+	std::smatch match; std::regex_match(sMsg, match, std::regex(R"((\d+.\d+)\s\d+\s\d+\s\d+.\d+\s\d+.\d+\svel\s\d+.\d+)"));
 
-	if (tMatch.size() == 2)
+	if (match.size() == 2)
 	{
 		m_bWaitingForPlayerPerf = false;
 
 		// credits to kgb for idea
-		float flNewServerTime = std::stof(tMatch[1].str());
+		float flNewServerTime = std::stof(match[1].str());
 		if (flNewServerTime < m_flServerTime)
 			return true;
 
@@ -134,7 +129,7 @@ bool CNoSpreadHitscan::ParsePlayerPerf(const std::string& sMsg)
 
 void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
-	if (!ShouldRun(pWeapon))
+	if (!ShouldRun(pLocal, pWeapon, true))
 		return;
 
 	m_iSeed = GetSeed(pCmd);
@@ -183,7 +178,7 @@ void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* 
 	const auto cFixedSpread = std::ranges::min_element(vBulletCorrections,
 		[&](const Vec3& lhs, const Vec3& rhs)
 		{
-			return lhs.DistToSqr(vAverageSpread) < rhs.DistToSqr(vAverageSpread);
+			return lhs.DistTo(vAverageSpread) < rhs.DistTo(vAverageSpread);
 		});
 
 	if (cFixedSpread == vBulletCorrections.end())
@@ -199,8 +194,12 @@ void CNoSpreadHitscan::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* 
 
 void CNoSpreadHitscan::Draw(CTFPlayer* pLocal)
 {
-	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::SeedPrediction) || !ShouldRun() || !pLocal->IsAlive())
+	if (!(Vars::Menu::Indicators.Value & Vars::Menu::IndicatorsEnum::SeedPrediction) || !Vars::Aimbot::General::NoSpread.Value || !pLocal->IsAlive())
 		return;
+
+	//auto pWeapon = H::Entities.GetWeapon();
+	//if (!pWeapon || !ShouldRun(pLocal, pWeapon))
+	//	return;
 
 	int x = Vars::Menu::SeedPredictionDisplay.Value.x;
 	int y = Vars::Menu::SeedPredictionDisplay.Value.y + 8;

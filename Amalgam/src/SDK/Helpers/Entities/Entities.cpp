@@ -4,10 +4,8 @@
 #include "../../../Utils/Hash/FNV1A.h"
 #include "../../../Features/Players/PlayerUtils.h"
 #include "../../../Features/Backtrack/Backtrack.h"
-#include "../../../Features/CheatDetection/CheatDetection.h"
+#include "../../../Features/CheaterDetection/CheaterDetection.h"
 #include "../../../Features/Resolver/Resolver.h"
-
-static std::unordered_map<unsigned short, DormantData> s_mDormancy = {};
 
 void CEntities::Store()
 {
@@ -40,9 +38,9 @@ void CEntities::Store()
 		case ETFClassID::CObjectSentrygun:
 		case ETFClassID::CObjectDispenser:
 		case ETFClassID::CObjectTeleporter:
-			m_aModels[n] = FNV1A::Hash32(I::ModelInfoClient->GetModelName(pEntity->GetModel()));
-			m_aGroups[EntityEnum::BuildingAll].push_back(pEntity);
-			m_aGroups[pEntity->m_iTeamNum() != m_pLocal->m_iTeamNum() ? EntityEnum::BuildingEnemy : EntityEnum::BuildingTeam].push_back(pEntity);
+			m_mModels[n] = FNV1A::Hash32(I::ModelInfoClient->GetModelName(pEntity->GetModel()));
+			m_mGroups[EntityEnum::BuildingAll].push_back(pEntity);
+			m_mGroups[pEntity->m_iTeamNum() != m_pLocal->m_iTeamNum() ? EntityEnum::BuildingEnemy : EntityEnum::BuildingTeam].push_back(pEntity);
 			break;
 		case ETFClassID::CBaseProjectile:
 		case ETFClassID::CBaseGrenade:
@@ -90,20 +88,20 @@ void CEntities::Store()
 				|| (nClassID == ETFClassID::CTFProjectile_Arrow || nClassID == ETFClassID::CTFProjectile_GrapplingHook) && !pEntity->m_MoveType())
 				break;
 
-			m_aGroups[EntityEnum::WorldProjectile].push_back(pEntity);
+			m_mGroups[EntityEnum::WorldProjectile].push_back(pEntity);
 
 			if (nClassID == ETFClassID::CTFGrenadePipebombProjectile)
 			{
 				auto pPipebomb = pEntity->As<CTFGrenadePipebombProjectile>();
 				if (pPipebomb->m_hThrower().Get() == pLocal && pPipebomb->m_iType() == TF_GL_MODE_REMOTE_DETONATE /*pPipebomb->HasStickyEffects()*/)
-					m_aGroups[EntityEnum::LocalStickies].push_back(pEntity);
+					m_mGroups[EntityEnum::LocalStickies].push_back(pEntity);
 			}
 
 			if (nClassID == ETFClassID::CTFProjectile_Flare)
 			{
 				auto pLauncher = pEntity->As<CTFProjectile_Flare>()->m_hLauncher()->As<CTFWeaponBase>();
 				if (pEntity->m_hOwnerEntity().Get() == m_pLocal && pLauncher && pLauncher->As<CTFFlareGun>()->GetFlareGunType() == FLAREGUN_DETONATE)
-					m_aGroups[EntityEnum::LocalFlares].push_back(pEntity);
+					m_mGroups[EntityEnum::LocalFlares].push_back(pEntity);
 			}
 
 			break;
@@ -114,40 +112,40 @@ void CEntities::Store()
 		case ETFClassID::CEyeballBoss:
 		case ETFClassID::CHeadlessHatman:
 		case ETFClassID::CZombie:
-			m_aGroups[EntityEnum::WorldNPC].push_back(pEntity);
+			m_mGroups[EntityEnum::WorldNPC].push_back(pEntity);
 			break;
 		case ETFClassID::CTFGenericBomb:
 		case ETFClassID::CTFPumpkinBomb:
-			m_aGroups[EntityEnum::WorldBomb].push_back(pEntity);
+			m_mGroups[EntityEnum::WorldBomb].push_back(pEntity);
 			break;
 		case ETFClassID::CBaseAnimating:
 		{
-			m_aModels[n] = FNV1A::Hash32(I::ModelInfoClient->GetModelName(pEntity->GetModel()));
+			m_mModels[n] = FNV1A::Hash32(I::ModelInfoClient->GetModelName(pEntity->GetModel()));
 			//if (IsHealth(GetModel(n)))
-			//	m_aGroups[EntityEnum::PickupHealth].push_back(pEntity);
+			//	m_mGroups[EntityEnum::PickupHealth].push_back(pEntity);
 			//else if (IsAmmo(GetModel(n)))
-			//	m_aGroups[EntityEnum::PickupAmmo].push_back(pEntity);
+			//	m_mGroups[EntityEnum::PickupAmmo].push_back(pEntity);
 			//else if (IsPowerup(GetModel(n)))
-			//	m_aGroups[EntityEnum::PickupPowerup].push_back(pEntity);
+			//	m_mGroups[EntityEnum::PickupPowerup].push_back(pEntity);
 			//else if (IsSpellbook(GetModel(n)))
-			//	m_aGroups[EntityEnum::PickupSpellbook].push_back(pEntity);
+			//	m_mGroups[EntityEnum::PickupSpellbook].push_back(pEntity);
 			break;
 		}
 		//case ETFClassID::CTFAmmoPack:
-		//	m_aGroups[EntityEnum::PickupAmmo].push_back(pEntity);
+		//	m_mGroups[EntityEnum::PickupAmmo].push_back(pEntity);
 		//	break;
 		//case ETFClassID::CCurrencyPack:
-		//	m_aGroups[EntityEnum::PickupMoney].push_back(pEntity);
+		//	m_mGroups[EntityEnum::PickupMoney].push_back(pEntity);
 		//	break;
 		//case ETFClassID::CHalloweenGiftPickup:
 		//	if (pEntity->As<CHalloweenGiftPickup>()->m_hTargetPlayer().Get() == m_pLocal)
-		//		m_aGroups[EntityEnum::PickupGargoyle].push_back(pEntity);
+		//		m_mGroups[EntityEnum::PickupGargoyle].push_back(pEntity);
 		//	break;
 		//case ETFClassID::CCaptureFlag:
-		//	m_aGroups[EntityEnum::WorldObjective].push_back(pEntity);
+		//	m_mGroups[EntityEnum::WorldObjective].push_back(pEntity);
 		//	break;
 		case ETFClassID::CSniperDot:
-			m_aGroups[EntityEnum::SniperDots].push_back(pEntity);
+			m_mGroups[EntityEnum::SniperDots].push_back(pEntity);
 			break;
 		}
 	}
@@ -246,39 +244,37 @@ void CEntities::Store()
 		}
 
 		auto pPlayer = I::ClientEntityList->GetClientEntity(n)->As<CTFPlayer>();
-		if (!pPlayer || !pPlayer->IsPlayer())
+		if (!pPlayer || !pPlayer->IsPlayer() || ManageDormancy(pPlayer))
 			continue;
 
-		m_aModels[n] = FNV1A::Hash32(I::ModelInfoClient->GetModelName(pPlayer->GetModel()));
-		m_aGroups[EntityEnum::PlayerAll].push_back(pPlayer);
-		m_aGroups[pPlayer->m_iTeamNum() != m_pLocal->m_iTeamNum() ? EntityEnum::PlayerEnemy : EntityEnum::PlayerTeam].push_back(pPlayer);
-		ManageDormancy(pPlayer);
+		m_mModels[n] = FNV1A::Hash32(I::ModelInfoClient->GetModelName(pPlayer->GetModel()));
+		m_mGroups[EntityEnum::PlayerAll].push_back(pPlayer);
+		m_mGroups[pPlayer->m_iTeamNum() != m_pLocal->m_iTeamNum() ? EntityEnum::PlayerEnemy : EntityEnum::PlayerTeam].push_back(pPlayer);
 		
 		if (n != I::EngineClient->GetLocalPlayer())
 		{
-			if (float flOldSimTime = m_aSimTimes[n], flSimTime = m_aSimTimes[n] = pPlayer->m_flSimulationTime();
-				m_aDeltaTimes[n] = flSimTime > flOldSimTime)
+			bool bDormant = pPlayer->IsDormant();
+			float flSimTime = pPlayer->m_flSimulationTime(), flOldSimTime = pPlayer->m_flOldSimulationTime();
+			if (float flDeltaTime = m_mDeltaTimes[n] = TICKS_TO_TIME(std::clamp(TIME_TO_TICKS(flSimTime - flOldSimTime) - iLag, 0, 24)))
 			{
-				m_aDeltaTimes[n] = m_aLagTimes[n] = TICKS_TO_TIME(std::clamp(TIME_TO_TICKS(flSimTime - flOldSimTime) - iLag, 1, 24));
-				m_aSetTicks[n] = I::GlobalVars->tickcount;
+				m_mLagTimes[n] = flDeltaTime;
+				m_mSetTicks[n] = I::GlobalVars->tickcount;
+				if (!bDormant)
+				{
+					m_mOrigins[n].emplace_front(pPlayer->m_vecOrigin() + Vec3(0, 0, pPlayer->GetSize().z), flSimTime);
+					if (m_mOrigins[n].size() > Vars::Aimbot::Projectile::VelocityAverageCount.Value)
+						m_mOrigins[n].pop_back();
 
-				m_aOldAngles[n] = m_aEyeAngles[n], m_aEyeAngles[n] = pPlayer->As<CTFPlayer>()->GetEyeAngles();
+					if (pPlayer->IsAlive())
+						F::CheaterDetection.ReportChoke(pPlayer, m_mChokes[n]);
+				}
+				else
+					m_mOrigins[n].clear();
 
-				m_aOrigins[n].emplace_front(pPlayer->m_vecOrigin() + Vec3(0, 0, pPlayer->GetSize().z), flSimTime);
-				if (m_aOrigins[n].size() > Vars::Aimbot::Projectile::VelocityAverageCount.Value)
-					m_aOrigins[n].pop_back();
-
-				if (pPlayer->IsAlive())
-					F::CheatDetection.ReportChoke(pPlayer, m_aChokes[n]);
+				m_mOldAngles[n] = m_mEyeAngles[n];
+				m_mEyeAngles[n] = pPlayer->As<CTFPlayer>()->GetEyeAngles();
 			}
-			if (!pPlayer->IsDormant())
-				m_aChokes[n] = I::GlobalVars->tickcount - m_aSetTicks[n];
-			else
-			{
-				m_aOrigins[n].clear();
-				if (s_mDormancy.contains(n))
-					m_aChokes[n] = TIME_TO_TICKS(I::GlobalVars->curtime - s_mDormancy[n].m_flLastUpdate);
-			}
+			m_mChokes[n] = I::GlobalVars->tickcount - m_mSetTicks[n];
 		}
 	}
 	F::Resolver.FrameStageNotify();
@@ -326,44 +322,45 @@ void CEntities::Clear(bool bShutdown)
 	m_pLocal = nullptr;
 	m_pLocalWeapon = nullptr;
 	m_pPlayerResource = nullptr;
-	m_aGroups = {};
+	m_mGroups.clear();
 
 	if (bShutdown)
 	{
-		m_aDeltaTimes = {};
-		m_aLagTimes = {};
-		m_aChokes = {};
-		m_aSetTicks = {};
-		m_aOldAngles = {};
-		m_aEyeAngles = {};
-		m_aLagCompensation = {};
-		m_aAvgVelocities = {};
-		m_aOrigins = {};
-		m_aModels = {};
-		s_mDormancy.clear();
+		m_mDeltaTimes.clear();
+		m_mLagTimes.clear();
+		m_mChokes.clear();
+		m_mSetTicks.clear();
+		m_mOldAngles.clear();
+		m_mEyeAngles.clear();
+		m_mLagCompensation.clear();
+		m_mDormancy.clear();
+		m_mAvgVelocities.clear();
+		m_mModels.clear();
+		m_mOrigins.clear();
 	}
 }
 
 void CEntities::ManualNetwork(const StartSoundParams_t& params)
 {
-	int n = params.soundsource;
-	if (n <= 0 || n > MAX_EDICTS - 1 || !params.origin || n == I::EngineClient->GetLocalPlayer())
+	if (params.soundsource <= 0 || !params.origin || params.soundsource == I::EngineClient->GetLocalPlayer())
 		return;
 
-	auto pEntity = I::ClientEntityList->GetClientEntity(n)->As<CBaseEntity>();
+	auto pEntity = I::ClientEntityList->GetClientEntity(params.soundsource)->As<CBaseEntity>();
 	if (!pEntity || !pEntity->IsDormant() || !pEntity->IsPlayer() && !pEntity->IsBuilding())
 		return;
 
+	float flDuration = 0.f;
 	switch (pEntity->GetClassID())
 	{
-	case ETFClassID::CTFPlayer:
-		pEntity->As<CTFPlayer>()->m_vecVelocity() = (params.origin - pEntity->m_vecOrigin()) / std::min(I::GlobalVars->curtime - s_mDormancy[n].m_flLastUpdate, 1.f);
-		pEntity->SetAbsVelocity(pEntity->As<CTFPlayer>()->m_vecVelocity()); SetAvgVelocity(pEntity->entindex(), pEntity->As<CTFPlayer>()->m_vecVelocity());
+	case ETFClassID::CTFPlayer: flDuration = 1.f; break;
+	case ETFClassID::CObjectSentrygun:
+	case ETFClassID::CObjectDispenser:
+	case ETFClassID::CObjectTeleporter: flDuration = 5.f; break;
 	}
-	pEntity->SetAbsOrigin(pEntity->m_vecOrigin() = params.origin);
-
-	s_mDormancy[n] = { params.origin, I::GlobalVars->curtime };
+	if (flDuration)
+		m_mDormancy[params.soundsource] = { params.origin, I::GlobalVars->curtime + flDuration };
 }
+
 bool CEntities::ManageDormancy(CBaseEntity* pEntity)
 {
 	bool bDormant = pEntity->IsDormant();
@@ -376,32 +373,32 @@ bool CEntities::ManageDormancy(CBaseEntity* pEntity)
 	case ETFClassID::CObjectDispenser:
 	case ETFClassID::CObjectTeleporter: flDuration = 5.f; break;
 	}
-	if (!flDuration)
-		return bDormant;
-
-	int n = pEntity->entindex();
-	if (n < 0 || n > MAX_EDICTS - 1)
-		return bDormant;
-
-	if (bDormant)
+	if (flDuration)
 	{
-		if (auto pResource = GetResource(); pResource && pEntity->IsPlayer())
+		int n = pEntity->entindex();
+		if (bDormant)
 		{
-			auto pPlayer = pEntity->As<CTFPlayer>();
-			pPlayer->m_lifeState() = pResource->m_bAlive(n) ? LIFE_ALIVE : LIFE_DEAD;
-			pPlayer->m_iHealth() = pResource->m_iHealth(n);
-			if (pPlayer->IsAlive() && pPlayer->m_iObserverMode() != OBS_MODE_NONE)
-				pPlayer->m_iObserverMode() = OBS_MODE_NONE;
+			if (pEntity->IsPlayer())
+			{
+				if (auto pResource = GetResource(); pResource)
+				{
+					pEntity->As<CTFPlayer>()->m_lifeState() = pResource->m_bAlive(n) ? LIFE_ALIVE : LIFE_DEAD;
+					pEntity->As<CTFPlayer>()->m_iHealth() = pResource->m_iHealth(n);
+				}
+			}
+			if (m_mDormancy.contains(n))
+			{
+				auto& tDormancy = m_mDormancy[n];
+				if (tDormancy.LastUpdate - I::GlobalVars->curtime > 0.f)
+					pEntity->SetAbsOrigin(pEntity->m_vecOrigin() = tDormancy.Location);
+				else
+					m_mDormancy.erase(n);
+			}
 		}
-		if (s_mDormancy.contains(n))
-		{
-			auto& tDormancy = s_mDormancy[n];
-			if (tDormancy.m_flLastUpdate + flDuration < I::GlobalVars->curtime || pEntity->IsPlayer() && !pEntity->As<CTFPlayer>()->IsAlive())
-				s_mDormancy.erase(n);
-		}
+		else if (!pEntity->IsPlayer() || pEntity->As<CTFPlayer>()->IsAlive())
+			m_mDormancy[n] = { pEntity->m_vecOrigin(), I::GlobalVars->curtime + flDuration };
 	}
-	else if (!pEntity->IsPlayer() || pEntity->As<CTFPlayer>()->IsAlive())
-		s_mDormancy[n] = { pEntity->m_vecOrigin(), I::GlobalVars->curtime };
+
 	return bDormant;
 }
 
@@ -506,20 +503,20 @@ CTFPlayerResource* CEntities::GetResource()
 	return m_pPlayerResource;
 }
 
-const std::vector<CBaseEntity*>& CEntities::GetGroup(uint8_t iGroup) { return m_aGroups[iGroup]; }
+const std::vector<CBaseEntity*>& CEntities::GetGroup(const EntityEnum::EntityEnum iGroup) { return m_mGroups[iGroup]; }
 
-float CEntities::GetDeltaTime(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? m_aDeltaTimes[iIndex] : TICK_INTERVAL; }
-float CEntities::GetLagTime(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? m_aLagTimes[iIndex] : TICK_INTERVAL; }
-int CEntities::GetChoke(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? m_aChokes[iIndex] : 0; }
-Vec3 CEntities::GetEyeAngles(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? m_aEyeAngles[iIndex] : Vec3(); }
-Vec3 CEntities::GetDeltaAngles(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? m_aEyeAngles[iIndex].DeltaAngle(m_aOldAngles[iIndex]) / GetLagTime(iIndex) * (F::Backtrack.GetReal() + TICKS_TO_TIME(F::Backtrack.GetAnticipatedChoke())) : Vec3(); }
-bool CEntities::GetLagCompensation(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? m_aLagCompensation[iIndex] : false; }
-void CEntities::SetLagCompensation(uint16_t iIndex, bool bLagComp) { if (iIndex < MAX_PLAYERS) m_aLagCompensation[iIndex] = bLagComp; }
-Vec3* CEntities::GetAvgVelocity(uint16_t iIndex) { return iIndex < MAX_PLAYERS && iIndex != I::EngineClient->GetLocalPlayer() ? &m_aAvgVelocities[iIndex] : nullptr; }
-void CEntities::SetAvgVelocity(uint16_t iIndex, Vec3 vAvgVelocity) { if (iIndex < MAX_PLAYERS) m_aAvgVelocities[iIndex] = vAvgVelocity; }
-std::deque<VelFixRecord>* CEntities::GetOrigins(uint16_t iIndex) { return iIndex < MAX_PLAYERS ? &m_aOrigins[iIndex] : nullptr; }
-uint32_t CEntities::GetModel(unsigned short iIndex) { return iIndex < MAX_EDICTS ? m_aModels[iIndex] : 0; }
-DormantData* CEntities::GetDormancy(unsigned short iIndex) { return s_mDormancy.contains(iIndex) ? &s_mDormancy[iIndex] : nullptr; }
+float CEntities::GetDeltaTime(int iIndex) { return m_mDeltaTimes.contains(iIndex) ? m_mDeltaTimes[iIndex] : TICK_INTERVAL; }
+float CEntities::GetLagTime(int iIndex) { return m_mLagTimes.contains(iIndex) ? m_mLagTimes[iIndex] : TICK_INTERVAL; }
+int CEntities::GetChoke(int iIndex) { return m_mChokes.contains(iIndex) ? m_mChokes[iIndex] : 0; }
+bool CEntities::GetDormancy(int iIndex) { return m_mDormancy.contains(iIndex); }
+Vec3 CEntities::GetEyeAngles(int iIndex) { return m_mEyeAngles.contains(iIndex) ? m_mEyeAngles[iIndex] : Vec3(); }
+Vec3 CEntities::GetDeltaAngles(int iIndex) { return m_mOldAngles.contains(iIndex) ? m_mEyeAngles[iIndex].DeltaAngle(m_mOldAngles[iIndex]) / GetLagTime(iIndex) * (F::Backtrack.GetReal() + TICKS_TO_TIME(F::Backtrack.GetAnticipatedChoke())) : Vec3(); }
+bool CEntities::GetLagCompensation(int iIndex) { return m_mLagCompensation[iIndex]; }
+void CEntities::SetLagCompensation(int iIndex, bool bLagComp) { m_mLagCompensation[iIndex] = bLagComp; }
+Vec3* CEntities::GetAvgVelocity(int iIndex) { return iIndex != I::EngineClient->GetLocalPlayer() ? &m_mAvgVelocities[iIndex] : nullptr; }
+void CEntities::SetAvgVelocity(int iIndex, Vec3 vAvgVelocity) { m_mAvgVelocities[iIndex] = vAvgVelocity; }
+uint32_t CEntities::GetModel(int iIndex) { return m_mModels[iIndex]; }
+std::deque<VelFixRecord>* CEntities::GetOrigins(int iIndex) { return m_mOrigins.contains(iIndex) ? &m_mOrigins[iIndex] : nullptr; }
 
 int CEntities::GetPriority(int iIndex) { return m_mIPriorities[iIndex]; }
 int CEntities::GetPriority(uint32_t uAccountID) { return m_mUPriorities[uAccountID]; }

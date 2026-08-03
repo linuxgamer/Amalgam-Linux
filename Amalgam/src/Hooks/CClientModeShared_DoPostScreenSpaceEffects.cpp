@@ -3,41 +3,45 @@
 #include "../Features/Visuals/Chams/Chams.h"
 #include "../Features/Visuals/Glow/Glow.h"
 #include "../Features/Visuals/CameraWindow/CameraWindow.h"
+#include "../Features/Visuals/FlipWorld/FlipWorld.h"
 #include "../Features/Visuals/Visuals.h"
 #include "../Features/Visuals/Materials/Materials.h"
-#include "../Features/Spectate/Spectate.h"
-
-MAKE_SIGNATURE(CViewRender_DrawViewModels, "client.dll", "48 89 5C 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 8B FA", 0x0);
 
 MAKE_HOOK(CClientModeShared_DoPostScreenSpaceEffects, U::Memory.GetVirtual(I::ClientModeShared, 39), bool,
 	void* rcx, const CViewSetup* pSetup)
 {
-	DEBUG_RETURN(CClientModeShared_DoPostScreenSpaceEffects, rcx, pSetup);
-
-	if (SDK::CleanScreenshot() || G::Unload)
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CClientModeShared_DoPostScreenSpaceEffects[DEFAULT_BIND])
 		return CALL_ORIGINAL(rcx, pSetup);
-	
-	F::Visuals.ProjectileTrace(H::Entities.GetLocal(), H::Entities.GetWeapon());
-	if (F::CameraWindow.m_bDrawing)
-		return CALL_ORIGINAL(rcx, pSetup);
+#endif
 
-	F::Visuals.DrawEffects();
-	if (I::EngineVGui->IsGameUIVisible() || !F::Materials.m_bLoaded)
+	if (SDK::CleanScreenshot())
 		return CALL_ORIGINAL(rcx, pSetup);
 
-	F::Chams.RenderMain();
-	F::Glow.RenderFirst();
-	return CALL_ORIGINAL(rcx, pSetup);
-}
+	auto pLocal = H::Entities.GetLocal();
+	auto pWeapon = H::Entities.GetWeapon();
+	if (pLocal && pWeapon)
+	{
+		F::Visuals.SplashRadius(pLocal);
+		F::Visuals.ProjectileTrace(pLocal, pWeapon);
+	}
 
-MAKE_HOOK(CViewRender_DrawViewModels, S::CViewRender_DrawViewModels(), void,
-	void* rcx, const CViewSetup& viewRender, bool drawViewmodel)
-{
-	DEBUG_RETURN(CViewRender_DrawViewModels, rcx, viewRender, drawViewmodel);
+	if (!F::CameraWindow.m_bDrawing)
+	{
+		F::Visuals.DrawEffects();
+		F::Chams.m_mEntities.clear();
+		if (!I::EngineVGui->IsGameUIVisible() && F::Materials.m_bLoaded)
+		{
+			F::Chams.RenderMain();
+			F::Glow.RenderMain();
+		}
+	}
 
-	CALL_ORIGINAL(rcx, viewRender, F::Spectate.HasTarget() && !I::EngineClient->IsHLTV() ? false : drawViewmodel);
-	if (SDK::CleanScreenshot() || F::CameraWindow.m_bDrawing || I::EngineVGui->IsGameUIVisible() || !F::Materials.m_bLoaded)
-		return;
+	const bool bRet = CALL_ORIGINAL(rcx, pSetup);
 
-	F::Glow.RenderSecond();
+	// Flip world: mirror the finished world frame horizontally HERE (this pass runs after the world +
+	// world ESP/chams/glow are drawn but BEFORE DrawViewModels and the 2D HUD - see viewrender.cpp
+	F::FlipWorld.Render(pSetup);
+
+	return bRet;
 }

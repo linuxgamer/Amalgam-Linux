@@ -2,12 +2,12 @@
 
 #include "../../SDK.h"
 
-bool CTraceFilterHitscan::ShouldHitEntity(IHandleEntity* pHandleEntity, int nContentsMask)
+bool CTraceFilterHitscan::ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask)
 {
-	if (!pHandleEntity || pHandleEntity == pSkip)
+	if (!pServerEntity || pServerEntity == pSkip)
 		return false;
 
-	auto pEntity = reinterpret_cast<CBaseEntity*>(pHandleEntity);
+	auto pEntity = reinterpret_cast<CBaseEntity*>(pServerEntity);
 	if (iTeam == -1) iTeam = pSkip ? pSkip->m_iTeamNum() : 0;
 	if (iType != SKIP_CHECK && !vWeapons.empty())
 	{
@@ -25,30 +25,30 @@ bool CTraceFilterHitscan::ShouldHitEntity(IHandleEntity* pHandleEntity, int nCon
 	case ETFClassID::CFuncAreaPortalWindow:
 	case ETFClassID::CFuncRespawnRoomVisualizer:
 	case ETFClassID::CTFReviveMarker: return false;
-	case ETFClassID::CTFMedigunShield: return !(nContentsMask & CONTENTS_PLAYERCLIP) && pEntity->m_iTeamNum() != iTeam;
+	case ETFClassID::CTFMedigunShield: return pEntity->m_iTeamNum() != iTeam;
 	case ETFClassID::CTFPlayer:
 	case ETFClassID::CBaseObject:
 	case ETFClassID::CObjectSentrygun:
 	case ETFClassID::CObjectDispenser:
-	case ETFClassID::CObjectTeleporter:
-		if (!(nContentsMask & CONTENTS_MOVEABLE)) return false;
-		if (iType != SKIP_CHECK && (iWeapon == WEAPON_INCLUDE ? bWeapon : !bWeapon)) return iType == FORCE_HIT ? true : false;
+	case ETFClassID::CObjectTeleporter: 
+		if (iType != SKIP_CHECK && (iWeapon == WEAPON_INCLUDE ? bWeapon : !bWeapon))
+			return iType == FORCE_HIT ? true : false;
 		return pEntity->m_iTeamNum() != iTeam;
 	}
 
-	return nContentsMask & CONTENTS_SOLID;
+	return true;
 }
 TraceType_t CTraceFilterHitscan::GetTraceType() const
 {
 	return TRACE_EVERYTHING;
 }
 
-bool CTraceFilterCollideable::ShouldHitEntity(IHandleEntity* pHandleEntity, int nContentsMask)
+bool CTraceFilterCollideable::ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask)
 {
-	if (!pHandleEntity || pHandleEntity == pSkip)
+	if (!pServerEntity || pServerEntity == pSkip)
 		return false;
 
-	auto pEntity = reinterpret_cast<CBaseEntity*>(pHandleEntity);
+	auto pEntity = reinterpret_cast<CBaseEntity*>(pServerEntity);
 	if (iTeam == -1) iTeam = pSkip ? pSkip->m_iTeamNum() : 0;
 	if (iType != SKIP_CHECK && !vWeapons.empty())
 	{
@@ -62,36 +62,44 @@ bool CTraceFilterCollideable::ShouldHitEntity(IHandleEntity* pHandleEntity, int 
 
 	switch (pEntity->GetClassID())
 	{
-	case ETFClassID::CBaseEntity: return nContentsMask & CONTENTS_SOLID;
-	case ETFClassID::CFunc_LOD:
+	case ETFClassID::CBaseEntity:
 	case ETFClassID::CBaseDoor:
 	case ETFClassID::CDynamicProp:
 	case ETFClassID::CPhysicsProp:
 	case ETFClassID::CPhysicsPropMultiplayer:
+	case ETFClassID::CFunc_LOD:
 	case ETFClassID::CObjectCartDispenser:
 	case ETFClassID::CFuncTrackTrain:
 	case ETFClassID::CFuncConveyor:
 	case ETFClassID::CTFGenericBomb:
-	case ETFClassID::CTFPumpkinBomb: return nContentsMask & CONTENTS_MOVEABLE;
-	case ETFClassID::CFuncRespawnRoomVisualizer: return nContentsMask & CONTENTS_PLAYERCLIP && pEntity->m_iTeamNum() != iTeam;
-	case ETFClassID::CTFMedigunShield: return !(nContentsMask & CONTENTS_PLAYERCLIP) && pEntity->m_iTeamNum() != iTeam;
+	case ETFClassID::CTFPumpkinBomb: return true;
+	case ETFClassID::CFuncRespawnRoomVisualizer:
+		if (nContentsMask & CONTENTS_PLAYERCLIP)
+			return pEntity->m_iTeamNum() != iTeam;
+		break;
+	case ETFClassID::CTFMedigunShield:
+		if (!(nContentsMask & CONTENTS_PLAYERCLIP))
+			return pEntity->m_iTeamNum() != iTeam;
+		break;
 	case ETFClassID::CTFPlayer:
-		if (!(nContentsMask & CONTENTS_MONSTER)) return false;
-		if (iPlayer == PLAYER_ALL) return true;
-		if (iPlayer == PLAYER_NONE) return false;
-		if (iType != SKIP_CHECK && (iWeapon == WEAPON_INCLUDE ? bWeapon : !bWeapon)) return iType == FORCE_HIT ? true : false;
+		if (iPlayer == PLAYER_ALL)
+			return true;
+		if (iPlayer == PLAYER_NONE)
+			return false;
+		if (iType != SKIP_CHECK && (iWeapon == WEAPON_INCLUDE ? bWeapon : !bWeapon))
+			return iType == FORCE_HIT ? true : false;
 		return pEntity->m_iTeamNum() != iTeam;
 	case ETFClassID::CBaseObject:
 	case ETFClassID::CObjectSentrygun:
-	case ETFClassID::CObjectDispenser: return nContentsMask & CONTENTS_MOVEABLE && (iObject == OBJECT_ALL ? true : iObject == OBJECT_NONE ? false : pEntity->m_iTeamNum() != iTeam);
-	case ETFClassID::CObjectTeleporter: return nContentsMask & CONTENTS_MOVEABLE;
+	case ETFClassID::CObjectDispenser: return iObject == OBJECT_ALL ? true : iObject == OBJECT_NONE ? false : pEntity->m_iTeamNum() != iTeam;
+	case ETFClassID::CObjectTeleporter: return true;
 	//case ETFClassID::CTFBaseBoss:
 	//case ETFClassID::CTFTankBoss:
 	//case ETFClassID::CMerasmus:
 	//case ETFClassID::CEyeballBoss:
 	//case ETFClassID::CHeadlessHatman:
-	//case ETFClassID::CZombie: return nContentsMask & CONTENTS_MONSTER && bMisc;
-	case ETFClassID::CTFGrenadePipebombProjectile: return nContentsMask & CONTENTS_MOVEABLE && bMisc && pEntity->As<CTFGrenadePipebombProjectile>()->m_iType() == TF_GL_MODE_REMOTE_DETONATE;
+	//case ETFClassID::CZombie: return bMisc;
+	case ETFClassID::CTFGrenadePipebombProjectile: return bMisc && pEntity->As<CTFGrenadePipebombProjectile>()->m_iType() == TF_GL_MODE_REMOTE_DETONATE;
 	}
 
 	return false;
@@ -101,33 +109,70 @@ TraceType_t CTraceFilterCollideable::GetTraceType() const
 	return TRACE_EVERYTHING;
 }
 
-bool CTraceFilterWorldAndPropsOnly::ShouldHitEntity(IHandleEntity* pHandleEntity, int nContentsMask)
+bool CTraceFilterWorldAndPropsOnly::ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask)
 {
-	if (!pHandleEntity || pHandleEntity == pSkip)
+	if (!pServerEntity || pServerEntity == pSkip)
 		return false;
-	if (pHandleEntity->GetRefEHandle().GetSerialNumber() == (1 << 15))
-		return nContentsMask & CONTENTS_SOLID && pHandleEntity->GetRefEHandle().GetEntryIndex() != iTeam; // team variable since cliententitylist can give nullptrs
+	if (pServerEntity->GetRefEHandle().GetSerialNumber() == (1 << 15))
+		return I::ClientEntityList->GetClientEntity(0) != pSkip;
 
-	auto pEntity = reinterpret_cast<CBaseEntity*>(pHandleEntity);
+	auto pEntity = reinterpret_cast<CBaseEntity*>(pServerEntity);
 	if (iTeam == -1) iTeam = pSkip ? pSkip->m_iTeamNum() : 0;
 
 	switch (pEntity->GetClassID())
 	{
-	case ETFClassID::CBaseEntity: return nContentsMask & CONTENTS_SOLID;
-	case ETFClassID::CFunc_LOD:
+	case ETFClassID::CBaseEntity:
 	case ETFClassID::CBaseDoor:
 	case ETFClassID::CDynamicProp:
 	case ETFClassID::CPhysicsProp:
 	case ETFClassID::CPhysicsPropMultiplayer:
+	case ETFClassID::CFunc_LOD:
 	case ETFClassID::CObjectCartDispenser:
 	case ETFClassID::CFuncTrackTrain:
-	case ETFClassID::CFuncConveyor: return nContentsMask & CONTENTS_MOVEABLE;
+	case ETFClassID::CFuncConveyor: return true;
 	case ETFClassID::CFuncRespawnRoomVisualizer: return nContentsMask & CONTENTS_PLAYERCLIP && pEntity->m_iTeamNum() != iTeam;
 	}
 
 	return false;
 }
 TraceType_t CTraceFilterWorldAndPropsOnly::GetTraceType() const
+{
+	return TRACE_EVERYTHING_FILTER_PROPS;
+}
+
+bool CTraceFilterWorldAndBrushOnly::ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask)
+{
+	if (!pServerEntity || pServerEntity == pSkip)
+		return false;
+	if (pServerEntity->GetRefEHandle().GetSerialNumber() == (1 << 15))
+		return I::ClientEntityList->GetClientEntity(0) != pSkip;
+
+	auto pEntity = reinterpret_cast<CBaseEntity*>(pServerEntity);
+	if (iTeam == -1) iTeam = pSkip ? pSkip->m_iTeamNum() : 0;
+
+	// Trigger / non-solid brush volumes (door triggers, spawn-room regenerate,
+	// spawn-protection triggers...) are pass-through, not real geometry - skip them
+	// so texture bug / auto align / air stuck don't catch on invisible trigger brushes.
+	if (pEntity->m_usSolidFlags() & (FSOLID_TRIGGER | FSOLID_NOT_SOLID))
+		return false;
+
+	switch (pEntity->GetClassID())
+	{
+	// World + brush-based entities are real collidable geometry - keep them.
+	case ETFClassID::CBaseEntity:
+	case ETFClassID::CBaseDoor:
+	case ETFClassID::CFunc_LOD:
+	case ETFClassID::CObjectCartDispenser:
+	case ETFClassID::CFuncTrackTrain:
+	case ETFClassID::CFuncConveyor: return true;
+	// CDynamicProp / CPhysicsProp / CPhysicsPropMultiplayer (studio model props) intentionally
+	// fall through to false - the only difference from CTraceFilterWorldAndPropsOnly.
+	case ETFClassID::CFuncRespawnRoomVisualizer: return nContentsMask & CONTENTS_PLAYERCLIP && pEntity->m_iTeamNum() != iTeam;
+	}
+
+	return false;
+}
+TraceType_t CTraceFilterWorldAndBrushOnly::GetTraceType() const
 {
 	return TRACE_EVERYTHING_FILTER_PROPS;
 }

@@ -1,13 +1,20 @@
 #pragma once
+#include "IMoveHelper.h"
 #include "../Misc/IPrediction.h"
 
 MAKE_SIGNATURE(CPrediction_RestoreEntityToPredictedFrame, "client.dll", "40 55 48 83 EC ? 8B EA", 0x0);
 
-class CBasePlayer;
-class CUserCmd;
 class CMoveData;
-class IMoveHelper;
+class CUserCmd;
+class CBasePlayer;
 
+// WARNING: do NOT count vtable slots off this listing - it is written in CPrediction's declaration order,
+// not vtable order. MSVC puts the IPrediction BASE slots first (see Misc/IPrediction.h: dtor=0 ...
+// GetViewAngles=10, SetViewAngles=11, GetLocalViewAngles=12, SetLocalViewAngles=13) and appends the virtuals
+// NEW to CPrediction after them: InPrediction=14, IsFirstTimePredicted=15, GetIncomingPacketNumber=16,
+// RunCommand=17, SetupMove=18, FinishMove=19, SetIdealPitch=20, _Update=21. Direct C++ calls through this
+// class resolve correctly either way; only hand-computed GetVirtual() indices go wrong (the Clean POV demos
+// hook once detoured IsFirstTimePredicted because "15" was counted from this list).
 class CPrediction : public IPrediction
 {
 public:

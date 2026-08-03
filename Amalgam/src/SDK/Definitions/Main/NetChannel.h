@@ -1,5 +1,8 @@
 #pragma once
-#include "../Misc/NetAdr.h"
+#include "INetworkSystem.h"
+#include "UtlVector.h"
+#include "../Misc/bitbuf.h"
+#include "../Misc/BaseTypes.h"
 
 enum
 {

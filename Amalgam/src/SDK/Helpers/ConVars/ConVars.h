@@ -1,6 +1,7 @@
 #pragma once
 #include "../../Definitions/Misc/ConVar.h"
 #include "../../../Utils/Macros/Macros.h"
+#include "../../../Utils/Hash/FNV1A.h"
 #include <unordered_map>
 
 class CConVars
@@ -14,8 +15,6 @@ private:
 public:
 	bool Unlock();
 	bool Restore();
-	bool Modify(bool bUnlock);
-
 	ConVar* FindVar(const char* sCVar);
 };
 

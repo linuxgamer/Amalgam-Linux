@@ -1,7 +1,5 @@
 #pragma once
 
-#define DEFCONFIGMETHOD( ret_type, method, xbox_return_value ) virtual ret_type method const = 0;
-
 enum HDRType_t
 {
 	HDR_TYPE_NONE,
@@ -15,6 +13,8 @@ enum VertexCompressionType_t
 	VERTEX_COMPRESSION_NONE = 0,
 	VERTEX_COMPRESSION_ON = 1
 };
+
+#define DEFCONFIGMETHOD( ret_type, method, xbox_return_value ) virtual ret_type method const = 0;
 
 class IMaterialSystemHardwareConfig
 {

@@ -4,14 +4,12 @@
 class CAutoRocketJump
 {
 private:
-	bool ShouldRun(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 	bool SetAngles(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd);
 
 	Vec3 m_vAngles = {};
 	bool m_bFull = false;
 	int m_iFrame = -1;
 	int m_iDelay = 0;
-	int m_iChoke = 0;
 	bool m_bRunning = false;
 
 public:

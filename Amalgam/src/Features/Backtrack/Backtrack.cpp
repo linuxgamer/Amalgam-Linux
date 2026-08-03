@@ -2,7 +2,6 @@
 
 #include "../PacketManip/FakeLag/FakeLag.h"
 #include "../Ticks/Ticks.h"
-#include "../AntiCheatCompatibility/AntiCheatCompatibility.h"
 
 void CBacktrack::Reset()
 {
@@ -31,7 +30,7 @@ float CBacktrack::GetWishFake()
 
 float CBacktrack::GetWishLerp()
 {
-	if (F::AntiCheatCompatibility.Active())
+	if (Vars::Misc::Game::AntiCheatCompatibility.Value)
 		return std::clamp(Vars::Backtrack::Interp.Value / 1000.f, G::Lerp, 0.1f);
 
 	return std::clamp(Vars::Backtrack::Interp.Value / 1000.f, G::Lerp, m_flMaxUnlag);
@@ -44,7 +43,7 @@ float CBacktrack::GetFakeLatency()
 
 float CBacktrack::GetFakeInterp()
 {
-	if (F::AntiCheatCompatibility.Active())
+	if (Vars::Misc::Game::AntiCheatCompatibility.Value)
 		return std::min(m_flFakeInterp, 0.1f);
 
 	return m_flFakeInterp;
@@ -67,7 +66,7 @@ int CBacktrack::GetAnticipatedChoke(int iMethod)
 
 void CBacktrack::CreateMove(CUserCmd* pCmd)
 {
-	if (F::AntiCheatCompatibility.Active())
+	if (Vars::Misc::Game::AntiCheatCompatibility.Value)
 		return;
 
 	// correct tick_count for fakeinterp / nointerp
@@ -102,9 +101,10 @@ void CBacktrack::SendLerp()
 	}
 }
 
-void CBacktrack::SetLerp()
+void CBacktrack::SetLerp(IGameEvent* pEvent)
 {
-	m_flFakeInterp = m_flSentInterp;
+	if (I::EngineClient->GetPlayerForUserID(pEvent->GetInt("userid")) == I::EngineClient->GetLocalPlayer())
+		m_flFakeInterp = m_flSentInterp;
 }
 
 void CBacktrack::UpdateDatagram()
@@ -134,7 +134,6 @@ bool CBacktrack::GetRecords(CBaseEntity* pEntity, std::vector<TickRecord*>& vRet
 		return false;
 
 	auto& vRecords = m_mRecords[pEntity];
-	vReturn.reserve(vRecords.size());
 	for (auto& tRecord : vRecords)
 		vReturn.push_back(&tRecord);
 	return true;
@@ -150,15 +149,22 @@ std::vector<TickRecord*> CBacktrack::GetValidRecords(std::vector<TickRecord*>& v
 		return {};
 
 	std::vector<TickRecord*> vReturn = {};
-	float flCorrect = std::clamp(GetReal(MAX_FLOWS, false) + ROUND_TO_TICKS(GetFakeInterp()), 0.f, m_flMaxUnlag) + flTimeMod;
-	int iServerTick = m_iTickCount + TIME_TO_TICKS(GetReal(FLOW_OUTGOING)) + GetAnticipatedChoke() + Vars::Backtrack::Offset.Value;
+	float flCorrect = std::clamp(GetReal(MAX_FLOWS, false) + ROUND_TO_TICKS(GetFakeInterp()), 0.f, m_flMaxUnlag);
+	int iServerTick = m_iTickCount + GetAnticipatedChoke() + Vars::Backtrack::Offset.Value + TIME_TO_TICKS(GetReal(FLOW_OUTGOING));
 
-	if (!F::AntiCheatCompatibility.Active() && GetWindow())
+	// Backtrack window 0 = OFF: no consumer (aimbot/visuals) may rewind a target into the past. The window
+	// block below is already skipped when GetWindow() is 0, but the "at least 1 record" fallback would still
+	// hand back the best ~ping-old lag-comp tick. When disabled, point that fallback at the CURRENT moment
+	// instead (flCorrect 0) and drop the 200 ms cap, so it always returns the most up-to-date record - i.e.
+	// where the target actually is now. Anti-cheat-compat keeps its own behaviour. Any window > 0 = unchanged.
+	const bool bNoBacktrack = !Vars::Misc::Game::AntiCheatCompatibility.Value && !GetWindow();
+
+	if (!Vars::Misc::Game::AntiCheatCompatibility.Value && GetWindow())
 	{
 		for (auto pRecord : vRecords)
 		{
-			float flDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(pRecord->m_flSimTime));
-			if (fabsf(flDelta) > GetWindow())
+			float flDelta = fabsf(flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(pRecord->m_flSimTime + flTimeMod)));
+			if (flDelta > GetWindow())
 				continue;
 
 			vReturn.push_back(pRecord);
@@ -167,11 +173,14 @@ std::vector<TickRecord*> CBacktrack::GetValidRecords(std::vector<TickRecord*>& v
 
 	if (vReturn.empty())
 	{	// make sure there is at least 1 record
-		float flMinDelta = 0.2f;
+		// With backtrack disabled (window 0) aim at "now" (flCorrect 0) and never reject on the 200 ms cap,
+		// so the single returned record is the most current one - no rewind. Otherwise behave exactly as before.
+		const float flFallbackCorrect = bNoBacktrack ? 0.f : flCorrect;
+		float flMinDelta = bNoBacktrack ? std::numeric_limits<float>::max() : 0.2f;
 		for (auto pRecord : vRecords)
 		{
-			float flDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(pRecord->m_flSimTime));
-			if (fabsf(flDelta) > flMinDelta)
+			float flDelta = fabsf(flFallbackCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(pRecord->m_flSimTime + flTimeMod)));
+			if (flDelta > flMinDelta)
 				continue;
 
 			flMinDelta = flDelta;
@@ -182,22 +191,24 @@ std::vector<TickRecord*> CBacktrack::GetValidRecords(std::vector<TickRecord*>& v
 	{
 		if (bDistance)
 			std::sort(vReturn.begin(), vReturn.end(), [&](const TickRecord* a, const TickRecord* b) -> bool
-			{
-				if (Vars::Backtrack::PreferOnShot.Value && a->m_bOnShot != b->m_bOnShot)
-					return a->m_bOnShot > b->m_bOnShot;
+				{
+					if (Vars::Backtrack::PreferOnShot.Value && a->m_bOnShot != b->m_bOnShot)
+						return a->m_bOnShot > b->m_bOnShot;
 
-				return pLocal->m_vecOrigin().DistToSqr(a->m_vOrigin) < pLocal->m_vecOrigin().DistToSqr(b->m_vOrigin);
-			});
+					return pLocal->m_vecOrigin().DistTo(a->m_vOrigin) < pLocal->m_vecOrigin().DistTo(b->m_vOrigin);
+				});
 		else
+		{
 			std::sort(vReturn.begin(), vReturn.end(), [&](const TickRecord* a, const TickRecord* b) -> bool
-			{
-				if (Vars::Backtrack::PreferOnShot.Value && a->m_bOnShot != b->m_bOnShot)
-					return a->m_bOnShot > b->m_bOnShot;
+				{
+					if (Vars::Backtrack::PreferOnShot.Value && a->m_bOnShot != b->m_bOnShot)
+						return a->m_bOnShot > b->m_bOnShot;
 
-				float flADelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(a->m_flSimTime));
-				float flBDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(b->m_flSimTime));
-				return fabsf(flADelta) < fabsf(flBDelta);
-			});
+					const float flADelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(a->m_flSimTime + flTimeMod));
+					const float flBDelta = flCorrect - TICKS_TO_TIME(iServerTick - TIME_TO_TICKS(b->m_flSimTime + flTimeMod));
+					return fabsf(flADelta) < fabsf(flBDelta);
+				});
+		}
 	}
 
 	return vReturn;
@@ -352,41 +363,41 @@ void CBacktrack::AdjustPing(CNetChannel* pNetChan)
 {
 	m_nOldInSequenceNr = pNetChan->m_nInSequenceNr, m_nOldInReliableState = pNetChan->m_nInReliableState;
 
-	auto fSet = [&]()
-	{
-		if (!Vars::Backtrack::Latency.Value)
-			return 0.f;
-
-		auto pLocal = H::Entities.GetLocal();
-		if (!pLocal || !pLocal->m_iClass())
-			return 0.f;
-
-		static auto host_timescale = H::ConVars.FindVar("host_timescale");
-		float flTimescale = host_timescale->GetFloat();
-
-		static float flStaticReal = 0.f;
-		float flFake = GetWishFake(), flReal = TICKS_TO_TIME(pLocal->m_nTickBase() - m_nOldTickBase);
-		flStaticReal += (flReal + 5 * TICK_INTERVAL - flStaticReal) * 0.1f;
-
-		int nInReliableState = pNetChan->m_nInReliableState, nInSequenceNr = pNetChan->m_nInSequenceNr; float flLatency = 0.f;
-		for (auto& cSequence : m_dSequences)
+	auto Set = [&]()
 		{
-			nInReliableState = cSequence.m_nInReliableState;
-			nInSequenceNr = cSequence.m_nSequenceNr;
-			flLatency = (I::GlobalVars->realtime - cSequence.m_flTime) * flTimescale - TICK_INTERVAL;
+			if (!Vars::Backtrack::Latency.Value)
+				return 0.f;
 
-			if (flLatency > flFake || m_nLastInSequenceNr >= cSequence.m_nSequenceNr || flLatency > m_flMaxUnlag - flStaticReal)
-				break;
-		}
-		if (flLatency > 1.f) // hacky failsafe
-			return 0.f;
+			auto pLocal = H::Entities.GetLocal();
+			if (!pLocal || !pLocal->m_iClass())
+				return 0.f;
 
-		pNetChan->m_nInReliableState = nInReliableState;
-		pNetChan->m_nInSequenceNr = nInSequenceNr;
-		return flLatency;
-	};
+			static auto host_timescale = H::ConVars.FindVar("host_timescale");
+			float flTimescale = host_timescale->GetFloat();
 
-	auto flLatency = fSet();
+			static float flStaticReal = 0.f;
+			float flFake = GetWishFake(), flReal = TICKS_TO_TIME(pLocal->m_nTickBase() - m_nOldTickBase);
+			flStaticReal += (flReal + 5 * TICK_INTERVAL - flStaticReal) * 0.1f;
+
+			int nInReliableState = pNetChan->m_nInReliableState, nInSequenceNr = pNetChan->m_nInSequenceNr; float flLatency = 0.f;
+			for (auto& cSequence : m_dSequences)
+			{
+				nInReliableState = cSequence.m_nInReliableState;
+				nInSequenceNr = cSequence.m_nSequenceNr;
+				flLatency = (I::GlobalVars->realtime - cSequence.m_flTime) * flTimescale - TICK_INTERVAL;
+
+				if (flLatency > flFake || m_nLastInSequenceNr >= cSequence.m_nSequenceNr || flLatency > m_flMaxUnlag - flStaticReal)
+					break;
+			}
+			if (flLatency > 1.f) // hacky failsafe
+				return 0.f;
+
+			pNetChan->m_nInReliableState = nInReliableState;
+			pNetChan->m_nInSequenceNr = nInSequenceNr;
+			return flLatency;
+		};
+
+	auto flLatency = Set();
 	m_nLastInSequenceNr = pNetChan->m_nInSequenceNr;
 
 	if (Vars::Backtrack::Latency.Value || m_flFakeLatency)

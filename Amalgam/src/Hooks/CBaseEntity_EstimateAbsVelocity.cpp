@@ -6,7 +6,10 @@
 MAKE_HOOK(CBaseEntity_EstimateAbsVelocity, S::CBaseEntity_EstimateAbsVelocity(), void,
 	void* rcx, Vector& vel)
 {
-	DEBUG_RETURN(CBaseEntity_EstimateAbsVelocity, rcx, vel);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CBaseEntity_EstimateAbsVelocity[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, vel);
+#endif
 
 	auto pPlayer = reinterpret_cast<CTFPlayer*>(rcx);
 	if (!pPlayer->IsPlayer())

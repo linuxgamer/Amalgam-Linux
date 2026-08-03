@@ -1,6 +1,6 @@
 #pragma once
 #include "../Misc/bitbuf.h"
-#include "../Misc/CUtlVector.h"
+#include "../Main/UtlVector.h"
 #include "../Types.h"
 
 #define	MAX_OSPATH 260 // max length of a filesystem pathname
@@ -276,7 +276,7 @@ public:
 
 	int	m_eStatusCode;
 
-public:
+private:
 	char m_szCvarNameBuffer[256];
 	char m_szCvarValueBuffer[256];
 };

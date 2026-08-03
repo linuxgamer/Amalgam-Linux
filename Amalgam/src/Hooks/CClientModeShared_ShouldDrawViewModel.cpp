@@ -5,7 +5,10 @@
 MAKE_HOOK(CClientModeShared_ShouldDrawViewModel, U::Memory.GetVirtual(I::ClientModeShared, 24), bool,
 	void* rcx)
 {
-	DEBUG_RETURN(CClientModeShared_ShouldDrawViewModel, rcx);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CClientModeShared_ShouldDrawViewModel[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx);
+#endif
 
 	if (Vars::Visuals::UI::ZoomFieldOfView.Value)
 	{

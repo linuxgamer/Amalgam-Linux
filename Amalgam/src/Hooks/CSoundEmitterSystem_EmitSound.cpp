@@ -3,7 +3,6 @@
 MAKE_SIGNATURE(CSoundEmitterSystem_EmitSound, "client.dll", "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 41 56 48 81 EC ? ? ? ? 49 8B D9", 0x0);
 //MAKE_SIGNATURE(S_StartDynamicSound, "engine.dll", "4C 8B DC 57 48 81 EC", 0x0);
 MAKE_SIGNATURE(S_StartSound, "engine.dll", "40 53 48 83 EC ? 48 83 79 ? ? 48 8B D9 75 ? 33 C0", 0x0);
-MAKE_SIGNATURE(CBaseEntity_EmitSound, "client.dll", "48 89 5C 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 48 8B 3D", 0x0);
 
 class IRecipientFilter
 {
@@ -72,25 +71,25 @@ struct EmitSound_t
 
 	EmitSound_t(const CSoundParameters& src);
 
-	int m_nChannel;
+	int							m_nChannel;
 	char const* m_pSoundName;
-	float m_flVolume;
-	int m_SoundLevel;
-	int m_nFlags;
-	int m_nPitch;
-	int m_nSpecialDSP;
+	float						m_flVolume;
+	int				m_SoundLevel;
+	int							m_nFlags;
+	int							m_nPitch;
+	int							m_nSpecialDSP;
 	const Vector* m_pOrigin;
-	float m_flSoundTime; ///< NOT DURATION, but rather, some absolute time in the future until which this sound should be delayed
+	float						m_flSoundTime; ///< NOT DURATION, but rather, some absolute time in the future until which this sound should be delayed
 	float* m_pflSoundDuration;
-	bool m_bEmitCloseCaption;
-	bool m_bWarnOnMissingCloseCaption;
-	bool m_bWarnOnDirectWaveReference;
-	int m_nSpeakerEntity;
-	mutable CUtlVector<Vector> m_UtlVecSoundOrigin;  ///< Actual sound origin(s) (can be multiple if sound routed through speaker entity(ies) )
-	mutable short m_hSoundScriptHandle;
+	bool						m_bEmitCloseCaption;
+	bool						m_bWarnOnMissingCloseCaption;
+	bool						m_bWarnOnDirectWaveReference;
+	int							m_nSpeakerEntity;
+	mutable CUtlVector< Vector >	m_UtlVecSoundOrigin;  ///< Actual sound origin(s) (can be multiple if sound routed through speaker entity(ies) )
+	mutable short		m_hSoundScriptHandle;
 };
 
-const static std::vector<const char*> s_vFootsteps = { "footstep", "flesh_impact_hard", "body_medium_impact_soft", "ceiling_tile_step", "glass_sheet_step", "rubber_tire_impact_soft", "plastic_box_impact_soft", "plastic_barrel_impact_soft", "cardboard_box_impact_soft", "glass_impact_soft" };
+const static std::vector<const char*> s_vFootsteps = { "footstep", "flesh_impact_hard", "body_medium_impact_soft", "glass_sheet_step", "rubber_tire_impact_soft", "plastic_box_impact_soft", "plastic_barrel_impact_soft", "cardboard_box_impact_soft", "ceiling_tile_step" };
 const static std::vector<const char*> s_vNoisemaker = { "items\\halloween", "items\\football_manager", "items\\japan_fundraiser", "items\\samurai\\tf_samurai_noisemaker", "items\\summer", "misc\\happy_birthday_tf", "misc\\jingle_bells" };
 const static std::vector<const char*> s_vFryingPan = { "pan_" };
 const static std::vector<const char*> s_vWater = { "ambient_mp3\\water\\water_splash", "slosh", "wade" };
@@ -102,29 +101,29 @@ static inline bool ShouldBlockSound(const char* pSound)
 
 	std::string sSound = pSound;
 	std::transform(sSound.begin(), sSound.end(), sSound.begin(), ::tolower);
-	auto fCheckSound = [&](const std::vector<const char*>& vSounds, int iFlag = -1)
-	{
-		if (Vars::Misc::Sound::Block.Value & iFlag)
+	auto CheckSound = [&](int iFlag, const std::vector<const char*>& vSounds)
 		{
-			for (auto& sNoise : vSounds)
+			if (Vars::Misc::Sound::Block.Value & iFlag)
 			{
-				if (sSound.find(sNoise) != std::string::npos)
-					return true;
+				for (auto& sNoise : vSounds)
+				{
+					if (sSound.find(sNoise) != std::string::npos)
+						return true;
+				}
 			}
-		}
-		return false;
-	};
+			return false;
+		};
 
-	if (fCheckSound(s_vFootsteps, Vars::Misc::Sound::BlockEnum::Footsteps))
+	if (CheckSound(Vars::Misc::Sound::BlockEnum::Footsteps, s_vFootsteps))
 		return true;
 
-	if (fCheckSound(s_vNoisemaker, Vars::Misc::Sound::BlockEnum::Noisemaker))
+	if (CheckSound(Vars::Misc::Sound::BlockEnum::Noisemaker, s_vNoisemaker))
 		return true;
 
-	if (fCheckSound(s_vFryingPan, Vars::Misc::Sound::BlockEnum::FryingPan))
+	if (CheckSound(Vars::Misc::Sound::BlockEnum::FryingPan, s_vFryingPan))
 		return true;
 
-	if (fCheckSound(s_vWater, Vars::Misc::Sound::BlockEnum::Water))
+	if (CheckSound(Vars::Misc::Sound::BlockEnum::Water, s_vWater))
 		return true;
 
 	return false;
@@ -133,7 +132,10 @@ static inline bool ShouldBlockSound(const char* pSound)
 MAKE_HOOK(CSoundEmitterSystem_EmitSound, S::CSoundEmitterSystem_EmitSound(), void,
 	void* rcx, IRecipientFilter& filter, int entindex, const EmitSound_t& ep)
 {
-	DEBUG_RETURN(CSoundEmitterSystem_EmitSound, rcx, filter, entindex, ep);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CSoundEmitterSystem_EmitSound[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, filter, entindex, ep);
+#endif
 
 	if (ShouldBlockSound(ep.m_pSoundName))
 		return;
@@ -145,7 +147,10 @@ MAKE_HOOK(CSoundEmitterSystem_EmitSound, S::CSoundEmitterSystem_EmitSound(), voi
 MAKE_HOOK(S_StartDynamicSound, S::S_StartDynamicSound(), int,
 	StartSoundParams_t& params)
 {
-	DEBUG_RETURN(S_StartDynamicSound, params);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::S_StartDynamicSound[DEFAULT_BIND])
+		return CALL_ORIGINAL(params);
+#endif
 
 	H::Entities.ManualNetwork(params);
 	if (params.pSfx && ShouldBlockSound(params.pSfx->getname()))
@@ -158,7 +163,10 @@ MAKE_HOOK(S_StartDynamicSound, S::S_StartDynamicSound(), int,
 MAKE_HOOK(S_StartSound, S::S_StartSound(), int,
 	StartSoundParams_t& params)
 {
-	DEBUG_RETURN(S_StartSound, params);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::S_StartSound[DEFAULT_BIND])
+		return CALL_ORIGINAL(params);
+#endif
 
 	if (!params.staticsound)
 		H::Entities.ManualNetwork(params);
@@ -166,25 +174,4 @@ MAKE_HOOK(S_StartSound, S::S_StartSound(), int,
 		return 0;
 
 	return CALL_ORIGINAL(params);
-}
-
-MAKE_HOOK(CBaseEntity_EmitSound, S::CBaseEntity_EmitSound(), void,
-	void* rcx, const char* soundname, float soundtime, float* duration)
-{
-	DEBUG_RETURN(CBaseEntity_EmitSound, rcx, soundname, soundtime, duration);
-
-	if (soundname)
-	{
-		switch (FNV1A::Hash32(soundname))
-		{
-		case FNV1A::Hash32Const("BumperCar.Jump"):
-		case FNV1A::Hash32Const("BumperCar.JumpLand"):
-		case FNV1A::Hash32Const("BumperCar.Bump"):
-		case FNV1A::Hash32Const("BumperCar.BumpHard"):
-			if (I::Prediction->InPrediction() && !I::Prediction->m_bFirstTimePredicted)
-				return;
-		}
-	}
-
-	CALL_ORIGINAL(rcx, soundname, soundtime, duration);
 }

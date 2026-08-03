@@ -79,9 +79,13 @@ public:
 #define FTYPEDESC_VIEW_NEVER 0x8000
 #define TD_MSECTOLERANCE 0.001f
 
+struct typedescription_t;
 class ISaveRestoreOps;
-struct datamap_t;
+
 typedef void (*inputfunc_t)(inputdata_t& data);
+
+struct datamap_t;
+struct typedescription_t;
 
 enum
 {

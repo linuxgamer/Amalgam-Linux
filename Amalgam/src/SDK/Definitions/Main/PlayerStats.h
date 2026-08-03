@@ -1,6 +1,6 @@
 #pragma once
-#include "../Misc/BaseTypes.h"
 #include "../Definitions.h"
+#include "../Misc/BaseTypes.h"
 
 #ifndef ARRAYSIZE
 	#define ARRAYSIZE(A) (sizeof(A)/sizeof((A)[0]))

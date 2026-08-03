@@ -1,10 +1,11 @@
 #pragma once
-#include <stdint.h>
-#include <cassert>
 
 #pragma warning (disable : 4244)
 #pragma warning (disable : 4002)
 class Vec3;
+
+#include <stdint.h>
+#include <cassert>
 
 #define nullAssert assert
 

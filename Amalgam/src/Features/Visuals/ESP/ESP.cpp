@@ -6,25 +6,109 @@
 #include "../../Simulation/MovementSimulation/MovementSimulation.h"
 #include "../../Simulation/ProjectileSimulation/ProjectileSimulation.h"
 
+#include "../../ImGui/nanosvg.h"
+#include "../../ImGui/nanosvgrast.h"
+#include "../../ImGui/class_icons_svg.h"
+
+// Lazily rasterize a class's SVG silhouette into a surface texture id (white RGB + coverage alpha,
+// so DrawSetColor tints it). -1 = unavailable. nanosvg's implementation lives in Render.cpp
+int GetSimpleClassIconTex(int iClass, int iPx)
+{
+	static std::unordered_map<int, int> s_mTextures = {}; // key = class * 100000 + px
+	if (iClass <= 0 || iClass >= TF_CLASS_COUNT_ALL)
+		return -1;
+	iPx = std::clamp(iPx, 4, 512);
+	const int iKey = iClass * 100000 + iPx;
+	if (auto it = s_mTextures.find(iKey); it != s_mTextures.end())
+		return it->second;
+	s_mTextures[iKey] = -1; // cache the miss until it succeeds below
+
+	const char* sSvg = nullptr;
+	for (const auto& tEntry : g_ClassIconSvgs)
+		if (tEntry.iClass == iClass) { sSvg = tEntry.svg; break; }
+	if (!sSvg)
+		return -1;
+
+	std::vector<char> vBuf(sSvg, sSvg + strlen(sSvg));
+	vBuf.push_back('\0');
+	NSVGimage* pImg = nsvgParse(vBuf.data(), "px", 96.f);
+	if (!pImg)
+		return -1;
+	if (pImg->width <= 0.f || pImg->height <= 0.f) { nsvgDelete(pImg); return -1; }
+
+	// Rasterize at 2x the draw size, then box-filter down to exactly iPx (supersampled anti-aliasing).
+	constexpr int kAA = 2;
+	const int iHi = iPx * kAA;
+	NSVGrasterizer* pRast = nsvgCreateRasterizer();
+	if (!pRast) { nsvgDelete(pImg); return -1; }
+	const float flScale = std::min(float(iHi) / pImg->width, float(iHi) / pImg->height);
+	std::vector<unsigned char> vHi(size_t(iHi) * iHi * 4);
+	nsvgRasterize(pRast, pImg, 0, 0, flScale, vHi.data(), iHi, iHi, iHi * 4);
+	nsvgDeleteRasterizer(pRast);
+	nsvgDelete(pImg);
+
+	// Box-downsample iHi -> iPx, averaging each kAA x kAA block's coverage. Force RGB white so the tint
+	// color shows; the averaged coverage becomes the antialiased alpha.
+	std::vector<unsigned char> vRGBA(size_t(iPx) * iPx * 4);
+	for (int yy = 0; yy < iPx; ++yy)
+		for (int xx = 0; xx < iPx; ++xx)
+		{
+			int iSum = 0;
+			for (int dy = 0; dy < kAA; ++dy)
+				for (int dx = 0; dx < kAA; ++dx)
+					iSum += vHi[(size_t(yy * kAA + dy) * iHi + (xx * kAA + dx)) * 4 + 3];
+			const size_t iDst = (size_t(yy) * iPx + xx) * 4;
+			vRGBA[iDst + 0] = 255;
+			vRGBA[iDst + 1] = 255;
+			vRGBA[iDst + 2] = 255;
+			vRGBA[iDst + 3] = (unsigned char)(iSum / (kAA * kAA));
+		}
+	const int iTex = H::Draw.CreateTextureFromArray(vRGBA.data(), iPx, iPx);
+	s_mTextures[iKey] = iTex;
+	return iTex;
+}
+
+MAKE_SIGNATURE(CTFPlayerSharedUtils_GetEconItemViewByLoadoutSlot, "client.dll", "48 89 6C 24 ? 56 41 54 41 55 41 56 41 57 48 83 EC", 0x0);
+MAKE_SIGNATURE(CEconItemView_GetItemName, "client.dll", "40 53 48 83 EC ? 48 8B D9 C6 81 ? ? ? ? ? E8 ? ? ? ? 48 8B 8B", 0x0);
+
 static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* pGroup, std::unordered_map<CBaseEntity*, PlayerCache_t>& mCache)
 {
 	int iIndex = pPlayer->entindex();
+	auto pResource = H::Entities.GetResource();
 
-	if (int iObserverMode = pLocal->m_iObserverMode(); iObserverMode == OBS_MODE_FIRSTPERSON || iObserverMode == OBS_MODE_THIRDPERSON
-		? iObserverMode == OBS_MODE_FIRSTPERSON && pLocal->m_hObserverTarget().GetEntryIndex() == iIndex
-		: !I::Input->CAM_IsThirdPerson() && iIndex == I::EngineClient->GetLocalPlayer())
+	int iObserverTarget = pLocal->m_hObserverTarget().GetEntryIndex();
+	int iObserverMode = pLocal->m_iObserverMode();
+	if (F::Spectate.m_iTarget != -1)
+	{
+		iObserverTarget = F::Spectate.m_hTargetTarget.GetEntryIndex();
+		iObserverMode = F::Spectate.m_iTargetMode;
+	}
+	bool bSpectate = iObserverMode == OBS_MODE_FIRSTPERSON || iObserverMode == OBS_MODE_THIRDPERSON;
+
+	bool bLocal = iIndex == I::EngineClient->GetLocalPlayer();
+	bool bTarget = bSpectate && iObserverTarget == iIndex;
+	if (!bSpectate ? !I::Input->CAM_IsThirdPerson() && bLocal : iObserverMode == OBS_MODE_FIRSTPERSON && bTarget)
 		return;
 
-	auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
-	auto pResource = H::Entities.GetResource();
-	bool bLocal = pPlayer->entindex() == I::EngineClient->GetLocalPlayer();
 	int iClassNum = pPlayer->m_iClass();
+	auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
 
 	PlayerCache_t& tCache = mCache[pPlayer];
-	tCache.m_flAlpha = pGroup->m_tColor.a / 255.f;
+	tCache.m_flAlpha = 1.f; // per-element colors carry their own alpha now
 	tCache.m_tColor = F::Groups.GetColor(pPlayer, pGroup).Alpha(255);
 	tCache.m_bBox = pGroup->m_iESP & ESPEnum::Box;
+	tCache.m_tBoxColor = pGroup->ElementColor(ESPEnum::Box);
+	tCache.m_bCornerBox = pGroup->m_bCornerBox;
+	tCache.m_bBoxOutline = pGroup->m_bBoxOutline;
+	tCache.m_flCornerLength = pGroup->m_flCornerLength;
 	tCache.m_bBones = pGroup->m_iESP & ESPEnum::Bones;
+	tCache.m_tBonesColor = pGroup->ElementColor(ESPEnum::Bones);
+	tCache.m_bHealthBarOutline = pGroup->m_bHealthBarOutline;
+	tCache.m_bHealthBarBackground = pGroup->m_bHealthBarBackground;
+	tCache.m_tHealthBarBackgroundColor = pGroup->m_tHealthBarBackgroundColor;
+	tCache.m_flHealthBarWidth = pGroup->m_flHealthBarWidth;
+	tCache.m_iHealthBarPosition = pGroup->m_iHealthBarPosition;
+	tCache.m_iNameMode = pGroup->m_iNamePosition == 1 ? ALIGN_BOTTOM : ALIGN_TOP;
 
 	if (pGroup->m_iESP & ESPEnum::Distance && !bLocal)
 	{
@@ -35,7 +119,14 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 	if (pResource)
 	{
 		if (pGroup->m_iESP & ESPEnum::Name)
-			tCache.m_vText.emplace_back(ALIGN_TOP, F::PlayerUtils.GetPlayerName(iIndex, pResource->GetName(iIndex)), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+			tCache.m_vText.emplace_back(tCache.m_iNameMode, F::PlayerUtils.GetPlayerName(iIndex, pResource->GetName(iIndex)), pGroup->ElementColor(ESPEnum::Name), Vars::Menu::Theme::Background.Value);
+
+		if (pGroup->m_iESP & ESPEnum::Avatar && !pResource->IsFakePlayer(iIndex))
+		{
+			tCache.m_bAvatar = true;
+			tCache.m_bAvatarOutline = pGroup->m_bAvatarOutline;
+			tCache.m_uAccountID = pResource->m_iAccountID(iIndex);
+		}
 
 		if (pGroup->m_iESP & (ESPEnum::Labels | ESPEnum::Priority) && !pResource->IsFakePlayer(iIndex))
 		{
@@ -47,53 +138,25 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 					tCache.m_vText.emplace_back(ALIGN_TOP, pTag->m_sName, pTag->m_tColor, pTag->m_tColor.IsColorDark() ? Color_t(255, 255, 255) : Color_t(0, 0, 0));
 			}
 
+			// "Flags" status labels (Invuln/Invis/Crit/Disguised). Which effects show is the global
+			// Vars::ESP::FlagEffects mask; they render with FONT_ESP_LABEL at the FlagPosition.
 			if (pGroup->m_iESP & ESPEnum::Labels)
 			{
-				std::vector<std::tuple<std::string, Color_t, int>> vTags = {};
-				for (auto& iID : F::PlayerUtils.GetPlayerTags(uAccountID))
-				{
-					auto pTag = F::PlayerUtils.GetTag(iID);
-					if (pTag && pTag->m_bLabel)
-						vTags.emplace_back(pTag->m_sName, pTag->m_tColor, pTag->m_iPriority);
-				}
-				if (H::Entities.IsFriend(uAccountID))
-				{
-					auto pTag = &F::PlayerUtils.m_vTags[F::PlayerUtils.TagToIndex(FRIEND_TAG)];
-					if (pTag->m_bLabel)
-						vTags.emplace_back(pTag->m_sName, pTag->m_tColor, pTag->m_iPriority);
-				}
-				if (auto iParty = H::Entities.GetParty(uAccountID))
-				{
-					auto pTag = &F::PlayerUtils.m_vTags[F::PlayerUtils.TagToIndex(PARTY_TAG)];
-					if (int iPartyCount = H::Entities.GetPartyCount() + 1; pTag->m_bLabel)
-					{
-						if (!--iParty)
-							vTags.emplace_back(pTag->m_sName, pTag->m_tColor, pTag->m_iPriority);
-						else
-							vTags.emplace_back(std::format("{}: {}", pTag->m_sName, iParty), pTag->m_tColor.HueShift(iParty * 360.f / iPartyCount), pTag->m_iPriority);
-					}
-				}
-				if (H::Entities.IsF2P(uAccountID))
-				{
-					auto pTag = &F::PlayerUtils.m_vTags[F::PlayerUtils.TagToIndex(F2P_TAG)];
-					if (pTag->m_bLabel)
-						vTags.emplace_back(pTag->m_sName, pTag->m_tColor, pTag->m_iPriority);
-				}
-
-				if (!vTags.empty())
-				{
-					std::sort(vTags.begin(), vTags.end(), [&](const auto a, const auto b) -> bool
-					{
-						// sort by priority if unequal
-						if (std::get<2>(a) != std::get<2>(b))
-							return std::get<2>(a) > std::get<2>(b);
-
-						return std::get<0>(a) < std::get<0>(b);
-					});
-
-					for (auto& [sName, tColor, _] : vTags)
-						tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, sName, tColor, tColor.IsColorDark() ? Color_t(255, 255, 255) : Color_t(0, 0, 0));
-				}
+				const int iFlags = Vars::ESP::FlagEffects.Value;
+				const Color_t tBg = Vars::Menu::Theme::Background.Value;
+				if (iFlags & Vars::ESP::FlagEffectsEnum::Invuln &&
+					(pPlayer->InCond(TF_COND_INVULNERABLE) ||
+					 pPlayer->InCond(TF_COND_INVULNERABLE_HIDE_UNLESS_DAMAGED) ||
+					 pPlayer->InCond(TF_COND_INVULNERABLE_USER_BUFF) ||
+					 pPlayer->InCond(TF_COND_INVULNERABLE_CARD_EFFECT)))
+					tCache.m_vLabels.emplace_back(ALIGN_TOPRIGHT, "Invuln", Vars::Colors::IndicatorTextBad.Value, tBg);
+				if (iFlags & Vars::ESP::FlagEffectsEnum::Invis)
+					if (float flInvis = pPlayer->GetEffectiveInvisibilityLevel())
+						tCache.m_vLabels.emplace_back(ALIGN_TOPRIGHT, "Invis", Vars::Menu::Theme::Active.Value, tBg);
+				if (iFlags & Vars::ESP::FlagEffectsEnum::Crit && pPlayer->IsCritBoosted())
+					tCache.m_vLabels.emplace_back(ALIGN_TOPRIGHT, "Crit", Vars::Colors::IndicatorTextBad.Value, tBg);
+				if (iFlags & Vars::ESP::FlagEffectsEnum::Disguised && pPlayer->InCond(TF_COND_DISGUISED))
+					tCache.m_vLabels.emplace_back(ALIGN_TOPRIGHT, "Disguised", Vars::Menu::Theme::Active.Value, tBg);
 			}
 		}
 	}
@@ -104,11 +167,10 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 		tCache.m_flHealth = flHealth > flMaxHealth
 			? 1.f + std::clamp((flHealth - flMaxHealth) / (floorf(flMaxHealth / 10.f) * 5), 0.f, 1.f)
 			: std::clamp(flHealth / flMaxHealth, 0.f, 1.f);
-		Color_t tColor = Vars::Colors::IndicatorBad.Value.Lerp(Vars::Colors::IndicatorGood.Value, std::clamp(tCache.m_flHealth, 0.f, 1.f), LerpEnum::HSV);
-		tCache.m_vBars.emplace_back(ALIGN_LEFT, tCache.m_flHealth, tColor, Vars::Colors::IndicatorMisc.Value);
+		tCache.m_vBars.emplace_back(ALIGN_LEFT, tCache.m_flHealth, pGroup->ElementColor(ESPEnum::HealthBar), pGroup->m_tHealthBarOverhealColor);
 	}
 	if (pGroup->m_iESP & ESPEnum::HealthText)
-		tCache.m_vText.emplace_back(ALIGN_LEFT, std::format("{}", flHealth), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(ALIGN_LEFT, std::format("{}", flHealth), pGroup->ElementColor(ESPEnum::HealthText), Vars::Menu::Theme::Background.Value);
 
 	if (pGroup->m_iESP & (ESPEnum::UberBar | ESPEnum::UberText) && iClassNum == TF_CLASS_MEDIC)
 	{
@@ -117,21 +179,36 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 		{
 			float flUber = std::clamp(pMediGun->As<CWeaponMedigun>()->m_flChargeLevel(), 0.f, 1.f);
 			if (pGroup->m_iESP & ESPEnum::UberBar)
-				tCache.m_vBars.emplace_back(ALIGN_BOTTOM, flUber, Vars::Colors::IndicatorMisc.Value, Color_t(), false);
+				tCache.m_vBars.emplace_back(ALIGN_BOTTOM, flUber, pGroup->ElementColor(ESPEnum::UberBar), Color_t(), false);
 			if (pGroup->m_iESP & ESPEnum::UberText)
-				tCache.m_vText.emplace_back(ALIGN_BOTTOMRIGHT, std::format("{:.0f}%", flUber * 100), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+				tCache.m_vText.emplace_back(ALIGN_BOTTOMRIGHT, std::format("{:.0f}%", flUber * 100), pGroup->ElementColor(ESPEnum::UberText), Vars::Menu::Theme::Background.Value);
 		}
 	}
 
 	if (pGroup->m_iESP & ESPEnum::ClassIcon)
+	{
 		tCache.m_iClassIcon = iClassNum;
+		tCache.m_iClassIconPosition = pGroup->m_iClassIconPosition;
+		tCache.m_flClassIconScale = pGroup->m_flClassIconScale;
+		tCache.m_bClassIconDistanceScale = pGroup->m_bClassIconDistanceScale;
+		tCache.m_bSimpleClassIcon = pGroup->m_bSimpleClassIcon;
+		tCache.m_tSimpleClassIconColor = pGroup->m_tSimpleClassIconColor;
+		tCache.m_bSimpleClassIconOutline = pGroup->m_bSimpleClassIconOutline;
+	}
 	if (pGroup->m_iESP & ESPEnum::ClassText)
-		tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, SDK::GetClassByIndex(iClassNum, false), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, SDK::GetClassByIndex(iClassNum, false), pGroup->ElementColor(ESPEnum::ClassText), Vars::Menu::Theme::Background.Value);
 
 	if (pGroup->m_iESP & ESPEnum::WeaponIcon && pWeapon)
+	{
 		tCache.m_pWeaponIcon = pWeapon->GetWeaponIcon();
+		tCache.m_tWeaponIconColor = pGroup->ElementColor(ESPEnum::WeaponIcon);
+	}
 	if (pGroup->m_iESP & ESPEnum::WeaponText && pWeapon)
-		tCache.m_vText.emplace_back(ALIGN_BOTTOM, SDK::ConvertWideToUTF8(pWeapon->GetWeaponName()), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+	{
+		auto pAttributeManager = U::Memory.CallVirtual<1, void*>(uintptr_t(pWeapon) + 3096);
+		auto pCurItemData = reinterpret_cast<void*>(uintptr_t(pAttributeManager) + 144);
+		tCache.m_vText.emplace_back(ALIGN_BOTTOM, SDK::ConvertWideToUTF8(S::CEconItemView_GetItemName.Call<const wchar_t*>(pCurItemData)), pGroup->ElementColor(ESPEnum::WeaponText), Vars::Menu::Theme::Background.Value);
+	}
 
 	if (pGroup->m_iESP & ESPEnum::LagCompensation && !pPlayer->IsDormant() && !bLocal)
 	{
@@ -329,16 +406,16 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 				}
 				else
 				{
-					auto fGetSniperDot = [](CBaseEntity* pEntity) -> CSniperDot*
-					{
-						for (auto pDot : H::Entities.GetGroup(EntityEnum::SniperDots))
+					auto GetSniperDot = [](CBaseEntity* pEntity) -> CSniperDot*
 						{
-							if (pDot->m_hOwnerEntity().Get() == pEntity)
-								return pDot->As<CSniperDot>();
-						}
-						return nullptr;
-					};
-					if (CSniperDot* pPlayerDot = fGetSniperDot(pPlayer))
+							for (auto pDot : H::Entities.GetGroup(EntityEnum::SniperDots))
+							{
+								if (pDot->m_hOwnerEntity().Get() == pEntity)
+									return pDot->As<CSniperDot>();
+							}
+							return nullptr;
+						};
+					if (CSniperDot* pPlayerDot = GetSniperDot(pPlayer))
 					{
 						float flChargeTime = std::max(SDK::AttribHookValue(3.f, "mult_sniper_charge_per_sec", pWeapon), 1.5f);
 						tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, std::format("Charging {:.0f}%", Math::RemapVal(TICKS_TO_TIME(I::ClientState->m_ClockDriftMgr.m_nServerTick) - pPlayerDot->m_flChargeStartTime() - 0.3f, 0.f, flChargeTime, 0.f, 100.f)), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
@@ -367,7 +444,7 @@ static inline void StorePlayer(CTFPlayer* pPlayer, CTFPlayer* pLocal, Group_t* p
 		if (Vars::Visuals::Removals::Taunts.Value && pPlayer->InCond(TF_COND_TAUNTING))
 			tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, "Taunt", Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
 
-		if (Vars::Debug::Info.Value && !bLocal /*&& !pPlayer->IsDormant()*/)
+		if (Vars::Debug::Info.Value && !pPlayer->IsDormant() && !bLocal)
 		{
 			int iAverage = TIME_TO_TICKS(F::MoveSim.GetPredictedDelta(pPlayer));
 			int iCurrent = H::Entities.GetChoke(iIndex);
@@ -384,9 +461,19 @@ static inline void StoreBuilding(CBaseObject* pBuilding, CTFPlayer* pLocal, Grou
 	bool bIsMini = pBuilding->m_bMiniBuilding();
 
 	BuildingCache_t& tCache = mCache[pBuilding];
-	tCache.m_flAlpha = pGroup->m_tColor.a / 255.f;
+	tCache.m_flAlpha = 1.f;
 	tCache.m_tColor = F::Groups.GetColor(pOwner ? pOwner : pBuilding, pGroup).Alpha(255);
 	tCache.m_bBox = pGroup->m_iESP & ESPEnum::Box;
+	tCache.m_tBoxColor = pGroup->ElementColor(ESPEnum::Box);
+	tCache.m_bCornerBox = pGroup->m_bCornerBox;
+	tCache.m_bBoxOutline = pGroup->m_bBoxOutline;
+	tCache.m_flCornerLength = pGroup->m_flCornerLength;
+	tCache.m_bHealthBarOutline = pGroup->m_bHealthBarOutline;
+	tCache.m_bHealthBarBackground = pGroup->m_bHealthBarBackground;
+	tCache.m_tHealthBarBackgroundColor = pGroup->m_tHealthBarBackgroundColor;
+	tCache.m_flHealthBarWidth = pGroup->m_flHealthBarWidth;
+	tCache.m_iHealthBarPosition = pGroup->m_iHealthBarPosition;
+	tCache.m_iNameMode = pGroup->m_iNamePosition == 1 ? ALIGN_BOTTOM : ALIGN_TOP;
 
 	if (pGroup->m_iESP & ESPEnum::Distance)
 	{
@@ -403,18 +490,17 @@ static inline void StoreBuilding(CBaseObject* pBuilding, CTFPlayer* pLocal, Grou
 		case ETFClassID::CObjectDispenser: sName = "Dispenser"; break;
 		case ETFClassID::CObjectTeleporter: sName = pBuilding->m_iObjectMode() ? "Teleporter Exit" : "Teleporter Entrance";
 		}
-		tCache.m_vText.emplace_back(ALIGN_TOP, sName, Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(tCache.m_iNameMode, sName, pGroup->ElementColor(ESPEnum::Name), Vars::Menu::Theme::Background.Value);
 	}
 
 	float flHealth = pBuilding->m_iHealth(), flMaxHealth = pBuilding->m_iMaxHealth();
 	if (pGroup->m_iESP & ESPEnum::HealthBar)
 	{
 		tCache.m_flHealth = std::clamp(flHealth / flMaxHealth, 0.f, 1.f);
-		Color_t tColor = Vars::Colors::IndicatorBad.Value.Lerp(Vars::Colors::IndicatorGood.Value, std::clamp(tCache.m_flHealth, 0.f, 1.f), LerpEnum::HSV);
-		tCache.m_vBars.emplace_back(ALIGN_LEFT, tCache.m_flHealth, tColor, Vars::Colors::IndicatorMisc.Value);
+		tCache.m_vBars.emplace_back(ALIGN_LEFT, tCache.m_flHealth, pGroup->ElementColor(ESPEnum::HealthBar), pGroup->m_tHealthBarOverhealColor);
 	}
 	if (pGroup->m_iESP & ESPEnum::HealthText)
-		tCache.m_vText.emplace_back(ALIGN_LEFT, std::format("{}", flHealth), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(ALIGN_LEFT, std::format("{}", flHealth), pGroup->ElementColor(ESPEnum::HealthText), Vars::Menu::Theme::Background.Value);
 
 	if (pGroup->m_iESP & (ESPEnum::AmmoBars | ESPEnum::AmmoText) && pBuilding->IsSentrygun() && !pBuilding->m_bBuilding())
 	{
@@ -422,13 +508,13 @@ static inline void StoreBuilding(CBaseObject* pBuilding, CTFPlayer* pLocal, Grou
 
 		if (pGroup->m_iESP & ESPEnum::AmmoBars)
 		{
-			tCache.m_vBars.emplace_back(ALIGN_BOTTOM, float(iShells) / iMaxShells, Vars::Menu::Theme::Inactive.Value, Color_t(), false);
+			tCache.m_vBars.emplace_back(ALIGN_BOTTOM, float(iShells) / iMaxShells, pGroup->ElementColor(ESPEnum::AmmoBars), Color_t(), false);
 			if (iMaxRockets)
-				tCache.m_vBars.emplace_back(ALIGN_BOTTOM, float(iRockets) / iMaxRockets, Vars::Menu::Theme::Inactive.Value, Color_t(), false);
+				tCache.m_vBars.emplace_back(ALIGN_BOTTOM, float(iRockets) / iMaxRockets, pGroup->ElementColor(ESPEnum::AmmoBars), Color_t(), false);
 		}
 		if (pGroup->m_iESP & ESPEnum::AmmoText)
 		{
-			tCache.m_vText.emplace_back(ALIGN_BOTTOMRIGHT, std::format("{}", iShells), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+			tCache.m_vText.emplace_back(ALIGN_BOTTOMRIGHT, std::format("{}", iShells), pGroup->ElementColor(ESPEnum::AmmoText), Vars::Menu::Theme::Background.Value);
 			if (iMaxRockets)
 				tCache.m_vText.back().m_sText += std::format(", {}", iRockets);
 		}
@@ -437,11 +523,11 @@ static inline void StoreBuilding(CBaseObject* pBuilding, CTFPlayer* pLocal, Grou
 	if (pGroup->m_iESP & ESPEnum::Owner && !pBuilding->m_bWasMapPlaced() && pOwner)
 	{
 		if (auto pResource = H::Entities.GetResource(); pResource)
-			tCache.m_vText.emplace_back(ALIGN_TOP, F::PlayerUtils.GetPlayerName(iIndex, pResource->GetName(iIndex)), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+			tCache.m_vText.emplace_back(ALIGN_TOP, F::PlayerUtils.GetPlayerName(iIndex, pResource->GetName(iIndex)), pGroup->ElementColor(ESPEnum::Owner), Vars::Menu::Theme::Background.Value);
 	}
 
 	if (pGroup->m_iESP & ESPEnum::Level && !bIsMini)
-		tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, std::format("Level {}", pBuilding->m_iUpgradeLevel()), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, std::format("Level {}", pBuilding->m_iUpgradeLevel()), pGroup->ElementColor(ESPEnum::Level), Vars::Menu::Theme::Background.Value);
 
 	if (pGroup->m_iESP & ESPEnum::Flags)
 	{
@@ -474,7 +560,7 @@ static inline const char* GetProjectileName(CBaseEntity* pProjectile)
 	case ETFClassID::CTFProjectile_ThrowableBreadMonster: sReturn = "Milk"; break;
 	case ETFClassID::CTFProjectile_SpellBats:
 	case ETFClassID::CTFProjectile_SpellKartBats: sReturn = "Bats"; break;
-	case ETFClassID::CTFProjectile_SpellMeteorShower: sReturn = "Meteors"; break;
+	case ETFClassID::CTFProjectile_SpellMeteorShower: sReturn = "Meteor shower"; break;
 	case ETFClassID::CTFProjectile_SpellMirv:
 	case ETFClassID::CTFProjectile_SpellPumpkin: sReturn = "Pumpkin"; break;
 	case ETFClassID::CTFProjectile_SpellSpawnBoss: sReturn = "Monoculus"; break;
@@ -503,9 +589,13 @@ static inline void StoreProjectile(CBaseEntity* pProjectile, CTFPlayer* pLocal, 
 	int iIndex = pOwner ? pOwner->entindex() : -1;
 
 	EntityCache_t& tCache = mCache[pProjectile];
-	tCache.m_flAlpha = pGroup->m_tColor.a / 255.f;
+	tCache.m_flAlpha = 1.f;
 	tCache.m_tColor = F::Groups.GetColor(pOwner ? pOwner : pProjectile, pGroup);
 	tCache.m_bBox = pGroup->m_iESP & ESPEnum::Box;
+	tCache.m_tBoxColor = pGroup->ElementColor(ESPEnum::Box);
+	tCache.m_bCornerBox = pGroup->m_bCornerBox;
+	tCache.m_bBoxOutline = pGroup->m_bBoxOutline;
+	tCache.m_flCornerLength = pGroup->m_flCornerLength;
 
 	if (pGroup->m_iESP & ESPEnum::Distance)
 	{
@@ -514,7 +604,7 @@ static inline void StoreProjectile(CBaseEntity* pProjectile, CTFPlayer* pLocal, 
 	}
 
 	if (pGroup->m_iESP & ESPEnum::Name)
-		tCache.m_vText.emplace_back(ALIGN_TOP, GetProjectileName(pProjectile), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(ALIGN_TOP, GetProjectileName(pProjectile), pGroup->ElementColor(ESPEnum::Name), Vars::Menu::Theme::Background.Value);
 
 	if (pGroup->m_iESP & ESPEnum::Owner && pOwner)
 	{
@@ -598,9 +688,13 @@ static inline void StoreObjective(CBaseEntity* pObjective, CTFPlayer* pLocal, Gr
 		return;
 
 	EntityCache_t& tCache = mCache[pObjective];
-	tCache.m_flAlpha = pGroup->m_tColor.a / 255.f;
+	tCache.m_flAlpha = 1.f;
 	tCache.m_tColor = F::Groups.GetColor(pObjective, pGroup);
 	tCache.m_bBox = pGroup->m_iESP & ESPEnum::Box;
+	tCache.m_tBoxColor = pGroup->ElementColor(ESPEnum::Box);
+	tCache.m_bCornerBox = pGroup->m_bCornerBox;
+	tCache.m_bBoxOutline = pGroup->m_bBoxOutline;
+	tCache.m_flCornerLength = pGroup->m_flCornerLength;
 
 	if (pGroup->m_iESP & ESPEnum::Distance)
 	{
@@ -615,7 +709,7 @@ static inline void StoreObjective(CBaseEntity* pObjective, CTFPlayer* pLocal, Gr
 		auto pIntel = pObjective->As<CCaptureFlag>();
 
 		if (pGroup->m_iESP & ESPEnum::Name)
-			tCache.m_vText.emplace_back(ALIGN_TOP, "Intel", Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+			tCache.m_vText.emplace_back(ALIGN_TOP, "Intel", pGroup->ElementColor(ESPEnum::Name), Vars::Menu::Theme::Background.Value);
 
 		if (pGroup->m_iESP & ESPEnum::Flags)
 		{
@@ -635,7 +729,7 @@ static inline void StoreObjective(CBaseEntity* pObjective, CTFPlayer* pLocal, Gr
 		if (pGroup->m_iESP & ESPEnum::IntelReturnTime && pIntel->m_nFlagStatus() == TF_FLAGINFO_DROPPED)
 		{
 			float flReturnTime = std::max(pIntel->m_flResetTime() - TICKS_TO_TIME(I::ClientState->m_ClockDriftMgr.m_nServerTick), 0.f);
-			tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, std::format("Return {:.1f}s", pIntel->m_flResetTime() - TICKS_TO_TIME(I::ClientState->m_ClockDriftMgr.m_nServerTick)).c_str(), Vars::Menu::Theme::Active.Value, Vars::Menu::Theme::Background.Value);
+			tCache.m_vText.emplace_back(ALIGN_TOPRIGHT, std::format("Return {:.1f}s", pIntel->m_flResetTime() - TICKS_TO_TIME(I::ClientState->m_ClockDriftMgr.m_nServerTick)).c_str(), pGroup->ElementColor(ESPEnum::IntelReturnTime), Vars::Menu::Theme::Background.Value);
 		}
 
 		break;
@@ -646,9 +740,13 @@ static inline void StoreObjective(CBaseEntity* pObjective, CTFPlayer* pLocal, Gr
 static inline void StoreMisc(CBaseEntity* pEntity, CTFPlayer* pLocal, Group_t* pGroup, std::unordered_map<CBaseEntity*, EntityCache_t>& mCache)
 {
 	EntityCache_t& tCache = mCache[pEntity];
-	tCache.m_flAlpha = pGroup->m_tColor.a / 255.f;
+	tCache.m_flAlpha = 1.f;
 	tCache.m_tColor = F::Groups.GetColor(pEntity, pGroup);
 	tCache.m_bBox = pGroup->m_iESP & ESPEnum::Box;
+	tCache.m_tBoxColor = pGroup->ElementColor(ESPEnum::Box);
+	tCache.m_bCornerBox = pGroup->m_bCornerBox;
+	tCache.m_bBoxOutline = pGroup->m_bBoxOutline;
+	tCache.m_flCornerLength = pGroup->m_flCornerLength;
 
 	if (pGroup->m_iESP & ESPEnum::Distance)
 	{
@@ -661,7 +759,7 @@ static inline void StoreMisc(CBaseEntity* pEntity, CTFPlayer* pLocal, Group_t* p
 		const char* sName = "Unknown";
 		switch (pEntity->GetClassID())
 		{
-		case ETFClassID::CTFBaseBoss: sName = "NPC"; break;
+		case ETFClassID::CTFBaseBoss: sName = "Boss"; break;
 		case ETFClassID::CTFTankBoss: sName = "Tank"; break;
 		case ETFClassID::CMerasmus: sName = "Merasmus"; break;
 		case ETFClassID::CEyeballBoss: sName = "Monoculus"; break;
@@ -705,7 +803,7 @@ static inline void StoreMisc(CBaseEntity* pEntity, CTFPlayer* pLocal, Group_t* p
 		case ETFClassID::CHalloweenGiftPickup: sName = "Gargoyle"; break;
 		}
 
-		tCache.m_vText.emplace_back(ALIGN_TOP, sName, pGroup->m_tColor, Vars::Menu::Theme::Background.Value);
+		tCache.m_vText.emplace_back(ALIGN_TOP, sName, pGroup->ElementColor(ESPEnum::Name), Vars::Menu::Theme::Background.Value);
 	}
 }
 
@@ -735,13 +833,8 @@ void CESP::Store(CTFPlayer* pLocal)
 	}
 }
 
-static matrix3x4 s_aBones[MAXSTUDIOBONES];
-static matrix3x4 s_mTransform = {};
-
 void CESP::Draw()
 {
-	Math::AngleMatrix({ 0.f, I::EngineClient->GetViewAngles().y, 0.f }, s_mTransform, false);
-
 	DrawWorld();
 	DrawBuildings();
 	DrawPlayers();
@@ -766,12 +859,13 @@ void CESP::DrawPlayers()
 		I::MatSystemSurface->DrawSetAlphaMultiplier(tCache.m_flAlpha);
 		
 		if (tCache.m_bBox)
-			H::Draw.LineRectOutline(x, y, w, h, tCache.m_tColor, { 0, 0, 0, 255 });
+			DrawBox(x, y, w, h, tCache);
 
 		if (tCache.m_bBones)
 		{
 			auto pPlayer = pEntity->As<CTFPlayer>();
-			if (pPlayer->SetupBones(s_aBones, MAXSTUDIOBONES, BONE_USED_BY_ANYTHING, I::GlobalVars->curtime))
+			matrix3x4 aBones[MAXSTUDIOBONES];
+			if (pPlayer->SetupBones(aBones, MAXSTUDIOBONES, BONE_USED_BY_ANYTHING, I::GlobalVars->curtime))
 			{
 				int iHead = pPlayer->GetBaseToHitbox(HITBOX_HEAD);
 				int iSpine2 = pPlayer->GetBaseToHitbox(HITBOX_SPINE2);
@@ -789,91 +883,219 @@ void CESP::DrawPlayers()
 				int iRightCalf = pPlayer->GetBaseToHitbox(HITBOX_RIGHT_CALF);
 				int iRightFoot = pPlayer->GetBaseToHitbox(HITBOX_RIGHT_FOOT);
 
-				DrawBones(pPlayer, s_aBones, { iHead, iSpine2, iPelvis }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iSpine2, iLeftUpperarm, iLeftForearm, iLeftHand }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iSpine2, iRightUpperarm, iRightForearm, iRightHand }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iPelvis, iLeftThigh, iLeftCalf, iLeftFoot }, tCache.m_tColor);
-				DrawBones(pPlayer, s_aBones, { iPelvis, iRightThigh, iRightCalf, iRightFoot }, tCache.m_tColor);
+				DrawBones(pPlayer, aBones, { iHead, iSpine2, iPelvis }, tCache.m_tBonesColor);
+				DrawBones(pPlayer, aBones, { iSpine2, iLeftUpperarm, iLeftForearm, iLeftHand }, tCache.m_tBonesColor);
+				DrawBones(pPlayer, aBones, { iSpine2, iRightUpperarm, iRightForearm, iRightHand }, tCache.m_tBonesColor);
+				DrawBones(pPlayer, aBones, { iPelvis, iLeftThigh, iLeftCalf, iLeftFoot }, tCache.m_tBonesColor);
+				DrawBones(pPlayer, aBones, { iPelvis, iRightThigh, iRightCalf, iRightFoot }, tCache.m_tBonesColor);
 			}
 		}
 
 		for (auto& [iMode, flPercent, tColor, tOverfill, bAdjust] : tCache.m_vBars)
 		{
-			auto fDrawBar = [&](int x, int y, int w, int h, EAlign eAlign = ALIGN_LEFT)
-			{
-				if (flPercent > 1.f)
+			auto drawBar = [&](int x, int y, int w, int h, EAlign eAlign, Color_t tOut, bool bAdj)
 				{
-					H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-					H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdjust);
-				}
-				else
-					H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-			};
+					if (flPercent > 1.f)
+					{
+						H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, tOut, eAlign, bAdj);
+						H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdj);
+					}
+					else
+						H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, tOut, eAlign, bAdj);
+				};
 
 			int iSpace = H::Draw.Scale(4);
 			int iThickness = H::Draw.Scale(2, Scale_Round);
 			switch (iMode)
 			{
 			case ALIGN_LEFT:
-				fDrawBar(x - iSpace - iThickness - lOffset, y, iThickness, h, ALIGN_BOTTOM);
-				lOffset += iSpace + iThickness;
+			{
+				// Per-group width + outline/background toggles + position for the health bar.
+				const int iW = H::Draw.Scale(tCache.m_flHealthBarWidth, Scale_Round);
+				const Color_t tOut = tCache.m_bHealthBarOutline ? Color_t{ 0, 0, 0, 255 } : Color_t{ 0, 0, 0, 0 };
+				// Background on => draw a full-size box behind the bar; as health drops the box is revealed.
+				switch (tCache.m_iHealthBarPosition)
+				{
+				case 1: // Right: vertical bar right of the box
+				{
+					const int iBarX = x + w + iSpace + rOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(iBarX, y, iW, h, tCache.m_tHealthBarBackgroundColor);
+					drawBar(iBarX, y, iW, h, ALIGN_BOTTOM, tOut, true);
+					rOffset += iSpace + iW;
+					break;
+				}
+				case 2: // Above: horizontal bar above the box
+				{
+					const int iBarY = y - iSpace - iW - tOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(x, iBarY, w, iW, tCache.m_tHealthBarBackgroundColor);
+					drawBar(x, iBarY, w, iW, ALIGN_LEFT, tOut, true);
+					tOffset += iSpace + iW;
+					break;
+				}
+				case 3: // Below: horizontal bar below the box
+				{
+					const int iBarY = y + h + iSpace + bOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(x, iBarY, w, iW, tCache.m_tHealthBarBackgroundColor);
+					drawBar(x, iBarY, w, iW, ALIGN_LEFT, tOut, true);
+					bOffset += iSpace + iW;
+					break;
+				}
+				default: // 0 Left: vertical bar left of the box (original)
+				{
+					const int iBarX = x - iSpace - iW - lOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(iBarX, y, iW, h, tCache.m_tHealthBarBackgroundColor);
+					drawBar(iBarX, y, iW, h, ALIGN_BOTTOM, tOut, true);
+					lOffset += iSpace + iW;
+					break;
+				}
+				}
 				break;
+			}
 			case ALIGN_BOTTOM:
-				fDrawBar(x, y + h + iSpace + bOffset, w, iThickness);
+				drawBar(x, y + h + iSpace + bOffset, w, iThickness, ALIGN_LEFT, { 0, 0, 0, 255 }, bAdjust);
 				bOffset += iSpace + iThickness;
 				break;
 			}
 		}
 
-		for (auto& [iMode, sText, tColor, tOutline] : tCache.m_vText)
+		// Capture the name's drawn position (first text in the configured name mode; the name is emplaced
+		// first) so the avatar + class icon can anchor to it wherever the name was moved.
+		int iNameCX = m, iNameCY = t - fFont.m_nTall / 2; float flNameW = 0.f; bool bNameCaptured = false;
+		for (auto& [iMode, sText, tColor, tOutlineRaw] : tCache.m_vText)
 		{
+			// Global ESP text style: None drops the backing colour; Shadow = single drop (0); Outline = full surround (1).
+			const int iTextStyle = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextShadow ? 0 : 1;
+			const Color_t tOutline = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextNone ? Color_t{ 0, 0, 0, 0 } : tOutlineRaw;
 			switch (iMode)
 			{
 			case ALIGN_TOP:
-				H::Draw.StringOutlined(fFont, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str());
+				if (!bNameCaptured && tCache.m_iNameMode == ALIGN_TOP) { iNameCX = m; iNameCY = t - tOffset - fFont.m_nTall / 2; flNameW = H::Draw.GetTextSize(sText.c_str(), fFont).x; bNameCaptured = true; }
+				H::Draw.StringOutlined(fFont, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str(), true, iTextStyle);
 				tOffset += nTall;
 				break;
 			case ALIGN_BOTTOM:
-				H::Draw.StringOutlined(fFont, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str());
+				if (!bNameCaptured && tCache.m_iNameMode == ALIGN_BOTTOM) { iNameCX = m; iNameCY = b + bOffset + fFont.m_nTall / 2; flNameW = H::Draw.GetTextSize(sText.c_str(), fFont).x; bNameCaptured = true; }
+				H::Draw.StringOutlined(fFont, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str(), true, iTextStyle);
 				bOffset += nTall;
 				break;
 			case ALIGN_LEFT:
-				H::Draw.StringOutlined(fFont, l - lOffset, y - H::Draw.Scale(2) + h - h * std::min(tCache.m_flHealth, 1.f), tColor, tOutline, ALIGN_TOPRIGHT, sText.c_str());
+				H::Draw.StringOutlined(fFont, l - lOffset, y - H::Draw.Scale(2) + h - h * std::min(tCache.m_flHealth, 1.f), tColor, tOutline, ALIGN_TOPRIGHT, sText.c_str(), true, iTextStyle);
 				break;
 			case ALIGN_TOPRIGHT:
-				H::Draw.StringOutlined(fFont, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str());
+				H::Draw.StringOutlined(fFont, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str(), true, iTextStyle);
 				rOffset += nTall;
 				break;
 			case ALIGN_BOTTOMRIGHT:
-				H::Draw.StringOutlined(fFont, r, y + h, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str());
+				H::Draw.StringOutlined(fFont, r, y + h, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str(), true, iTextStyle);
 				break;
+			}
+		}
+
+		// --- Status "flags" labels: separate FONT_ESP_LABEL (user scale) stacked at the global FlagPosition ---
+		if (!tCache.m_vLabels.empty())
+		{
+			const auto& fLabel = H::Fonts.GetFont(FONT_ESP_LABEL);
+			const int nLabelTall = fLabel.m_nTall + H::Draw.Scale(2);
+			const int iLabelStyle = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextShadow ? 0 : 1;
+			int iLabelOff = 0; // local vertical accumulator (Left side has no shared vertical offset)
+			for (auto& [iMode, sText, tColor, tOutlineRaw] : tCache.m_vLabels)
+			{
+				const Color_t tOutline = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextNone ? Color_t{ 0, 0, 0, 0 } : tOutlineRaw;
+				switch (Vars::ESP::FlagPosition.Value)
+				{
+				case Vars::ESP::FlagPositionEnum::Left:
+					H::Draw.StringOutlined(fLabel, l - lOffset, y - H::Draw.Scale(2) + iLabelOff, tColor, tOutline, ALIGN_TOPRIGHT, sText.c_str(), true, iLabelStyle);
+					iLabelOff += nLabelTall;
+					break;
+				case Vars::ESP::FlagPositionEnum::Above:
+					H::Draw.StringOutlined(fLabel, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str(), true, iLabelStyle);
+					tOffset += nLabelTall;
+					break;
+				case Vars::ESP::FlagPositionEnum::Below:
+					H::Draw.StringOutlined(fLabel, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str(), true, iLabelStyle);
+					bOffset += nLabelTall;
+					break;
+				default: // Right
+					H::Draw.StringOutlined(fLabel, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str(), true, iLabelStyle);
+					rOffset += nLabelTall;
+					break;
+				}
 			}
 		}
 
 		if (tCache.m_iClassIcon)
 		{
-			const char* sTexture = "vgui/glyph_multiplayer.vtf";
-			switch (tCache.m_iClassIcon)
+			// Simple (SVG) icons render 10% bigger than the VTF ones; both scaled by the per-group multiplier.
+			// Optionally shrink with distance: the box height h falls off with range, so scale off it (clamped).
+			float flDistMul = 1.f;
+			if (tCache.m_bClassIconDistanceScale)
+				flDistMul = std::clamp(h / float(H::Draw.Scale(100)), 0.35f, 1.f);
+			const int iSize = H::Draw.Scale(18.f * tCache.m_flClassIconScale * flDistMul * (tCache.m_bSimpleClassIcon ? 1.1f : 1.f), Scale_Round);
+			// Position relative to the box: 0 above the name, 1 below the box, 2 left, 3 right.
+			const int iIconGap = H::Draw.Scale(4);
+			int iIconX = m, iIconY = t - tOffset; EAlign eIconAlign = ALIGN_BOTTOM;
+			switch (tCache.m_iClassIconPosition)
 			{
-			case TF_CLASS_SCOUT: sTexture = "hud/leaderboard_class_scout.vtf"; break;
-			case TF_CLASS_SOLDIER: sTexture = "hud/leaderboard_class_soldier.vtf"; break;
-			case TF_CLASS_PYRO: sTexture = "hud/leaderboard_class_pyro.vtf"; break;
-			case TF_CLASS_DEMOMAN: sTexture = "hud/leaderboard_class_demo.vtf"; break;
-			case TF_CLASS_HEAVY: sTexture = "hud/leaderboard_class_heavy.vtf"; break;
-			case TF_CLASS_ENGINEER: sTexture = "hud/leaderboard_class_engineer.vtf"; break;
-			case TF_CLASS_MEDIC: sTexture = "hud/leaderboard_class_medic.vtf"; break;
-			case TF_CLASS_SNIPER: sTexture = "hud/leaderboard_class_sniper.vtf"; break;
-			case TF_CLASS_SPY: sTexture = "hud/leaderboard_class_spy.vtf"; break;
+			case 1: iIconX = m;           iIconY = b + bOffset;       eIconAlign = ALIGN_TOP;   bOffset += iSize + H::Draw.Scale(2); break;
+			case 2: iIconX = l - lOffset; iIconY = y + h / 2;         eIconAlign = ALIGN_RIGHT;  lOffset += iSize + iIconGap;         break;
+			case 3: iIconX = r + rOffset; iIconY = y + h / 2;         eIconAlign = ALIGN_LEFT;   rOffset += iSize + iIconGap;         break;
+			default: iIconX = m;          iIconY = t - tOffset;       eIconAlign = ALIGN_BOTTOM; tOffset += iSize + H::Draw.Scale(2); break;
 			}
-			int iSize = H::Draw.Scale(18, Scale_Round);
-			H::Draw.Texture(sTexture, m, t - tOffset, iSize, iSize, ALIGN_BOTTOM);
+			if (tCache.m_bSimpleClassIcon)
+			{
+				// Flat SVG silhouette, tinted by the chosen color.
+				const int iIcon = GetSimpleClassIconTex(tCache.m_iClassIcon, iSize);
+				if (tCache.m_bSimpleClassIconOutline)
+				{
+					// Stamp black copies offset in 8 directions behind the icon (same idea as text outline).
+					const int iO = std::max(1, int(H::Draw.Scale(1, Scale_Round)));
+					const Color_t tBlack = { 0, 0, 0, tCache.m_tSimpleClassIconColor.a };
+					for (int dy = -1; dy <= 1; ++dy)
+						for (int dx = -1; dx <= 1; ++dx)
+							if (dx || dy)
+								H::Draw.TextureId(iIcon, iIconX + dx * iO, iIconY + dy * iO, iSize, iSize, tBlack, eIconAlign);
+				}
+				H::Draw.TextureId(iIcon, iIconX, iIconY, iSize, iSize, tCache.m_tSimpleClassIconColor, eIconAlign);
+			}
+			else
+			{
+				const char* sTexture = "vgui/glyph_multiplayer.vtf";
+				switch (tCache.m_iClassIcon)
+				{
+				case TF_CLASS_SCOUT: sTexture = "hud/leaderboard_class_scout.vtf"; break;
+				case TF_CLASS_SOLDIER: sTexture = "hud/leaderboard_class_soldier.vtf"; break;
+				case TF_CLASS_PYRO: sTexture = "hud/leaderboard_class_pyro.vtf"; break;
+				case TF_CLASS_DEMOMAN: sTexture = "hud/leaderboard_class_demo.vtf"; break;
+				case TF_CLASS_HEAVY: sTexture = "hud/leaderboard_class_heavy.vtf"; break;
+				case TF_CLASS_ENGINEER: sTexture = "hud/leaderboard_class_engineer.vtf"; break;
+				case TF_CLASS_MEDIC: sTexture = "hud/leaderboard_class_medic.vtf"; break;
+				case TF_CLASS_SNIPER: sTexture = "hud/leaderboard_class_sniper.vtf"; break;
+				case TF_CLASS_SPY: sTexture = "hud/leaderboard_class_spy.vtf"; break;
+				}
+				H::Draw.Texture(sTexture, iIconX, iIconY, iSize, iSize, eIconAlign);
+			}
 		}
 
 		if (tCache.m_pWeaponIcon)
 		{
 			float flW = tCache.m_pWeaponIcon->Width(), flH = tCache.m_pWeaponIcon->Height();
 			float flScale = H::Draw.Scale(std::min((w + 40) / 2.f, 80.f) / std::max(flW, flH * 2));
-			H::Draw.DrawHudTexture(m - flW / 2.f * flScale, b + bOffset, flScale, tCache.m_pWeaponIcon, Vars::Menu::Theme::Active.Value);
+			H::Draw.DrawHudTexture(m - flW / 2.f * flScale, b + bOffset, flScale, tCache.m_pWeaponIcon, tCache.m_tWeaponIconColor);
+		}
+
+		// Avatar circle left of the name, wherever the name landed (captured above).
+		if (tCache.m_bAvatar && tCache.m_uAccountID)
+		{
+			const float flRad = fFont.m_nTall / 3.f;
+			const int iCx = iNameCX - int(flNameW / 2.f) - int(flRad) - H::Draw.Scale(6);
+			const int iCy = iNameCY;
+			H::Draw.AvatarCircle(iCx, iCy, flRad, tCache.m_uAccountID);
+			if (tCache.m_bAvatarOutline)
+				H::Draw.LineCircle(iCx, iCy, flRad, 32, { 0, 0, 0, 255 });
 		}
 	}
 
@@ -899,56 +1121,102 @@ void CESP::DrawBuildings()
 		I::MatSystemSurface->DrawSetAlphaMultiplier(tCache.m_flAlpha);
 
 		if (tCache.m_bBox)
-			H::Draw.LineRectOutline(x, y, w, h, tCache.m_tColor, { 0, 0, 0, 255 });
+			DrawBox(x, y, w, h, tCache);
 		for (auto& [iMode, flPercent, tColor, tOverfill, bAdjust] : tCache.m_vBars)
 		{
-			auto fDrawBar = [&](int x, int y, int w, int h, EAlign eAlign = ALIGN_LEFT)
-			{
-				if (flPercent > 1.f)
+			auto drawBar = [&](int x, int y, int w, int h, EAlign eAlign, Color_t tOut, bool bAdj)
 				{
-					H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-					H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdjust);
-				}
-				else
-					H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, { 0, 0, 0, 255 }, eAlign, bAdjust);
-			};
+					if (flPercent > 1.f)
+					{
+						H::Draw.FillRectPercent(x, y, w, h, 1.f, tColor, tOut, eAlign, bAdj);
+						H::Draw.FillRectPercent(x, y, w, h, flPercent - 1.f, tOverfill, { 0, 0, 0, 0 }, eAlign, bAdj);
+					}
+					else
+						H::Draw.FillRectPercent(x, y, w, h, flPercent, tColor, tOut, eAlign, bAdj);
+				};
 
 			int iSpace = H::Draw.Scale(4);
 			int iThickness = H::Draw.Scale(2, Scale_Round);
 			switch (iMode)
 			{
 			case ALIGN_LEFT:
-				fDrawBar(x - iSpace - iThickness - lOffset, y, iThickness, h, ALIGN_BOTTOM);
-				lOffset += iSpace + iThickness;
+			{
+				// Per-group width + outline/background toggles + position for the health bar.
+				const int iW = H::Draw.Scale(tCache.m_flHealthBarWidth, Scale_Round);
+				const Color_t tOut = tCache.m_bHealthBarOutline ? Color_t{ 0, 0, 0, 255 } : Color_t{ 0, 0, 0, 0 };
+				// Background on => draw a full-size box behind the bar; as health drops the box is revealed.
+				switch (tCache.m_iHealthBarPosition)
+				{
+				case 1: // Right: vertical bar right of the box
+				{
+					const int iBarX = x + w + iSpace + rOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(iBarX, y, iW, h, tCache.m_tHealthBarBackgroundColor);
+					drawBar(iBarX, y, iW, h, ALIGN_BOTTOM, tOut, true);
+					rOffset += iSpace + iW;
+					break;
+				}
+				case 2: // Above: horizontal bar above the box
+				{
+					const int iBarY = y - iSpace - iW - tOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(x, iBarY, w, iW, tCache.m_tHealthBarBackgroundColor);
+					drawBar(x, iBarY, w, iW, ALIGN_LEFT, tOut, true);
+					tOffset += iSpace + iW;
+					break;
+				}
+				case 3: // Below: horizontal bar below the box
+				{
+					const int iBarY = y + h + iSpace + bOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(x, iBarY, w, iW, tCache.m_tHealthBarBackgroundColor);
+					drawBar(x, iBarY, w, iW, ALIGN_LEFT, tOut, true);
+					bOffset += iSpace + iW;
+					break;
+				}
+				default: // 0 Left: vertical bar left of the box (original)
+				{
+					const int iBarX = x - iSpace - iW - lOffset;
+					if (tCache.m_bHealthBarBackground)
+						H::Draw.FillRect(iBarX, y, iW, h, tCache.m_tHealthBarBackgroundColor);
+					drawBar(iBarX, y, iW, h, ALIGN_BOTTOM, tOut, true);
+					lOffset += iSpace + iW;
+					break;
+				}
+				}
 				break;
+			}
 			case ALIGN_BOTTOM:
-				fDrawBar(x, y + h + iSpace + bOffset, w, iThickness);
+				drawBar(x, y + h + iSpace + bOffset, w, iThickness, ALIGN_LEFT, { 0, 0, 0, 255 }, bAdjust);
 				bOffset += iSpace + iThickness;
 				break;
 			}
 		}
 
-		for (auto& [iMode, sText, tColor, tOutline] : tCache.m_vText)
+		for (auto& [iMode, sText, tColor, tOutlineRaw] : tCache.m_vText)
 		{
+			// Global ESP text style: None drops the backing colour; Shadow = single drop (0); Outline = full surround (1).
+			const int iTextStyle = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextShadow ? 0 : 1;
+			const Color_t tOutline = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextNone ? Color_t{ 0, 0, 0, 0 } : tOutlineRaw;
 			switch (iMode)
 			{
 			case ALIGN_TOP:
-				H::Draw.StringOutlined(fFont, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str());
+				H::Draw.StringOutlined(fFont, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str(), true, iTextStyle);
 				tOffset += nTall;
 				break;
 			case ALIGN_BOTTOM:
-				H::Draw.StringOutlined(fFont, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str());
+				H::Draw.StringOutlined(fFont, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str(), true, iTextStyle);
 				bOffset += nTall;
 				break;
 			case ALIGN_LEFT:
-				H::Draw.StringOutlined(fFont, l - lOffset, y - H::Draw.Scale(2) + h - h * std::min(tCache.m_flHealth, 1.f), tColor, tOutline, ALIGN_TOPRIGHT, sText.c_str());
+				H::Draw.StringOutlined(fFont, l - lOffset, y - H::Draw.Scale(2) + h - h * std::min(tCache.m_flHealth, 1.f), tColor, tOutline, ALIGN_TOPRIGHT, sText.c_str(), true, iTextStyle);
 				break;
 			case ALIGN_TOPRIGHT:
-				H::Draw.StringOutlined(fFont, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str());
+				H::Draw.StringOutlined(fFont, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str(), true, iTextStyle);
 				rOffset += nTall;
 				break;
 			case ALIGN_BOTTOMRIGHT:
-				H::Draw.StringOutlined(fFont, r, y + h, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str());
+				H::Draw.StringOutlined(fFont, r, y + h, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str(), true, iTextStyle);
 				break;
 			}
 		}
@@ -976,23 +1244,26 @@ void CESP::DrawWorld()
 		I::MatSystemSurface->DrawSetAlphaMultiplier(tCache.m_flAlpha);
 
 		if (tCache.m_bBox)
-			H::Draw.LineRectOutline(x, y, w, h, tCache.m_tColor, { 0, 0, 0, 255 });
+			DrawBox(x, y, w, h, tCache);
 
 
-		for (auto& [iMode, sText, tColor, tOutline] : tCache.m_vText)
+		for (auto& [iMode, sText, tColor, tOutlineRaw] : tCache.m_vText)
 		{
+			// Global ESP text style: None drops the backing colour; Shadow = single drop (0); Outline = full surround (1).
+			const int iTextStyle = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextShadow ? 0 : 1;
+			const Color_t tOutline = Vars::ESP::TextStyle.Value == Vars::ESP::TextStyleEnum::TextNone ? Color_t{ 0, 0, 0, 0 } : tOutlineRaw;
 			switch (iMode)
 			{
 			case ALIGN_TOP:
-				H::Draw.StringOutlined(fFont, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str());
+				H::Draw.StringOutlined(fFont, m, t - tOffset, tColor, tOutline, ALIGN_BOTTOM, sText.c_str(), true, iTextStyle);
 				tOffset += nTall;
 				break;
 			case ALIGN_BOTTOM:
-				H::Draw.StringOutlined(fFont, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str());
+				H::Draw.StringOutlined(fFont, m, b + bOffset, tColor, tOutline, ALIGN_TOP, sText.c_str(), true, iTextStyle);
 				bOffset += nTall;
 				break;
 			case ALIGN_TOPRIGHT:
-				H::Draw.StringOutlined(fFont, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str());
+				H::Draw.StringOutlined(fFont, r, y - H::Draw.Scale(2) + rOffset, tColor, tOutline, ALIGN_TOPLEFT, sText.c_str(), true, iTextStyle);
 				rOffset += nTall;
 				break;
 			}
@@ -1002,12 +1273,36 @@ void CESP::DrawWorld()
 	I::MatSystemSurface->DrawSetAlphaMultiplier(1.f);
 }
 
+void CESP::DrawBox(int x, int y, int w, int h, const EntityCache_t& tCache)
+{
+	const Color_t tColor = tCache.m_tBoxColor;
+	const bool bOutline = tCache.m_bBoxOutline;
+	if (tCache.m_bCornerBox)
+	{
+		const float flLen = tCache.m_flCornerLength;
+		if (bOutline)
+			H::Draw.LineCornerRectOutline(x, y, w, h, tColor, { 0, 0, 0, 255 }, flLen);
+		else
+			H::Draw.LineCornerRect(x, y, w, h, tColor, flLen);
+	}
+	else
+	{
+		if (bOutline)
+			H::Draw.LineRectOutline(x, y, w, h, tColor, { 0, 0, 0, 255 });
+		else
+			H::Draw.LineRect(x, y, w, h, tColor);
+	}
+}
+
 bool CESP::GetDrawBounds(CBaseEntity* pEntity, float& x, float& y, float& w, float& h)
 {
-	Math::MatrixInitialize(s_mTransform, pEntity->GetAbsOrigin(), false);
+	Vec3 vOrigin = pEntity->GetAbsOrigin();
+	matrix3x4 mTransform = { { 1, 0, 0, vOrigin.x }, { 0, 1, 0, vOrigin.y }, { 0, 0, 1, vOrigin.z } };
+	//if (pEntity->entindex() == I::EngineClient->GetLocalPlayer())
+		Math::AngleMatrix({ 0.f, I::EngineClient->GetViewAngles().y, 0.f }, mTransform, false);
 
 	float flLeft, flRight, flTop, flBottom;
-	if (!SDK::IsOnScreen(pEntity, s_mTransform, &flLeft, &flRight, &flTop, &flBottom, true))
+	if (!SDK::IsOnScreen(pEntity, mTransform, &flLeft, &flRight, &flTop, &flBottom, true))
 		return false;
 
 	x = flLeft;
@@ -1025,18 +1320,32 @@ bool CESP::GetDrawBounds(CBaseEntity* pEntity, float& x, float& y, float& w, flo
 		w *= 0.75f;
 	}
 
+	// Flip world mirrors the rendered frame in screen space, but W2S/IsOnScreen still return unflipped
+	// coordinates - so mirror the box horizontally to keep the ESP aligned with the mirrored world.
+	if (G::FlipWorldActive)
+		x = H::Draw.m_nScreenW - (x + w);
+
 	return !(x > H::Draw.m_nScreenW || x + w < 0 || y > H::Draw.m_nScreenH || y + h < 0);
 }
 
-void CESP::DrawBones(CTFPlayer* pPlayer, matrix3x4* aBones, std::vector<int> vBones, Color_t tColor)
+void CESP::DrawBones(CTFPlayer* pPlayer, matrix3x4* aBones, std::vector<int> vecBones, Color_t clr)
 {
-	for (size_t n = 1; n < vBones.size(); n++)
+	const int iThickness = std::max(1, int(H::Draw.Scale(Vars::ESP::SkeletonThickness.Value, Scale_Round)));
+	for (size_t n = 1; n < vecBones.size(); n++)
 	{
-		auto vBone1 = pPlayer->GetHitboxCenter(aBones, vBones[n]);
-		auto vBone2 = pPlayer->GetHitboxCenter(aBones, vBones[n - 1]);
+		auto vBone1 = pPlayer->GetHitboxCenter(aBones, vecBones[n]);
+		auto vBone2 = pPlayer->GetHitboxCenter(aBones, vecBones[n - 1]);
 
 		Vec3 vScreen1, vScreen2;
 		if (SDK::W2S(vBone1, vScreen1) && SDK::W2S(vBone2, vScreen2))
-			H::Draw.Line(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, tColor);
+		{
+			// Mirror bone X to match the flipped world frame (see GetDrawBounds).
+			if (G::FlipWorldActive)
+			{
+				vScreen1.x = H::Draw.m_nScreenW - vScreen1.x;
+				vScreen2.x = H::Draw.m_nScreenW - vScreen2.x;
+			}
+			H::Draw.LineThick(vScreen1.x, vScreen1.y, vScreen2.x, vScreen2.y, clr, iThickness);
+		}
 	}
 }

@@ -1,40 +1,19 @@
 #pragma once
-#include "../../Utils/Math/BaseMath.h"
-#include <numbers>
-#include <string>
-#include <format>
-#include <array>
+#include <algorithm>
 #include <vector>
 #include <deque>
-#include <unordered_map>
-#include <map>
-#include <ranges>
-#include <optional>
+#include <string>
+#include <format>
 
-namespace std
-{
-	template <class T>
-	using unordered_mapset = unordered_map<T, bool>;
-}
+#define PI 3.14159265358979323846
+#define M_RADPI 57.295779513082
+#define DEG2RAD(x) ((float)(x) * (float)((float)(PI) / 180.f))
+#define RAD2DEG(x) ((float)(x) * (float)(180.f / (float)(PI)))
+
+#pragma warning (disable : 26495)
 
 class Vec2
 {
-public:
-	static inline Vec2 Get(float v = 0.f)
-	{
-		return { v, v };
-	}
-
-	static inline Vec2 GetMin()
-	{
-		return Get(-FLT_MAX);
-	}
-
-	static inline Vec2 GetMax()
-	{
-		return Get(FLT_MAX);
-	}
-
 public:
 	float x = 0.f, y = 0.f;
 
@@ -46,27 +25,27 @@ public:
 
 	inline Vec2(float X = 0.f, float Y = 0.f)
 	{
-		x = X, y = Y;
+		x = X; y = Y;
 	}
 
 	inline Vec2(float* v)
 	{
-		x = v[0], y = v[1];
+		x = v[0]; y = v[1];
 	}
 
 	inline Vec2(const float* v)
 	{
-		x = v[0], y = v[1];
+		x = v[0]; y = v[1];
 	}
 
 	inline Vec2(const Vec2& v)
 	{
-		x = v.x, y = v.y;
+		x = v.x; y = v.y;
 	}
 
 	inline Vec2& operator=(const Vec2& v)
 	{
-		x = v.x, y = v.y; return *this;
+		x = v.x; y = v.y; return *this;
 	}
 
 	inline float& operator[](int i)
@@ -96,42 +75,42 @@ public:
 
 	inline Vec2& operator+=(const Vec2& v)
 	{
-		x += v.x, y += v.y; return *this;
+		x += v.x; y += v.y; return *this;
 	}
 
 	inline Vec2& operator-=(const Vec2& v)
 	{
-		x -= v.x, y -= v.y; return *this;
+		x -= v.x; y -= v.y; return *this;
 	}
 
 	inline Vec2& operator*=(const Vec2& v)
 	{
-		x *= v.x, y *= v.y; return *this;
+		x *= v.x; y *= v.y; return *this;
 	}
 
 	inline Vec2& operator/=(const Vec2& v)
 	{
-		x /= v.x, y /= v.y; return *this;
+		x /= v.x; y /= v.y; return *this;
 	}
 
 	inline Vec2& operator+=(float v)
 	{
-		x += v, y += v; return *this;
+		x += v; y += v; return *this;
 	}
 
 	inline Vec2& operator-=(float v)
 	{
-		x -= v, y -= v; return *this;
+		x -= v; y -= v; return *this;
 	}
 
 	inline Vec2& operator*=(float v)
 	{
-		x *= v, y *= v; return *this;
+		x *= v; y *= v; return *this;
 	}
 
 	inline Vec2& operator/=(float v)
 	{
-		x /= v, y /= v; return *this;
+		x /= v; y /= v; return *this;
 	}
 
 	inline Vec2 operator+(const Vec2& v) const
@@ -159,19 +138,9 @@ public:
 		return Vec2(x + v, y + v);
 	}
 
-	inline friend Vec2 operator+(float l, const Vec2& r)
-	{
-		return Vec2(l + r.x, l + r.y);
-	}
-
 	inline Vec2 operator-(float v) const
 	{
 		return Vec2(x - v, y - v);
-	}
-
-	inline friend Vec2 operator-(float l, const Vec2& r)
-	{
-		return Vec2(l - r.x, l - r.y);
 	}
 
 	inline Vec2 operator*(float v) const
@@ -179,39 +148,14 @@ public:
 		return Vec2(x * v, y * v);
 	}
 
-	inline friend Vec2 operator*(float l, const Vec2& r)
-	{
-		return Vec2(l * r.x, l * r.y);
-	}
-
 	inline Vec2 operator/(float v) const
 	{
 		return Vec2(x / v, y / v);
 	}
 
-	inline friend Vec2 operator/(float l, const Vec2& r)
-	{
-		return Vec2(l / r.x, l / r.y);
-	}
-
-	inline Vec2 operator-() const
-	{
-		return Vec2(-x, -y);
-	}
-
 	inline void Set(float X = 0.f, float Y = 0.f)
 	{
-		x = X, y = Y;
-	}
-
-	inline void Set(const Vec2& v)
-	{
-		x = v.x, y = v.y;
-	}
-
-	inline Vec2 Pow(float flPower) const
-	{
-		return Vec2(powf(x, flPower), powf(y, flPower));
+		x = X; y = Y;
 	}
 
 	inline float Min() const
@@ -256,32 +200,54 @@ public:
 
 	inline Vec2 Lerp(const Vec2& v, float t) const
 	{
-		return { Math::Lerp(x, v.x, t), Math::Lerp(y, v.y, t) };
+		return { x + (v.x - x) * t, y + (v.y - y) * t };
 	}
 
 	inline Vec2 Lerp(float v, float t) const
 	{
-		return { Math::Lerp(x, v, t), Math::Lerp(y, v, t) };
+		return { x + (v - x) * t, y + (v - y) * t };
 	}
 
 	inline Vec2 DeltaAngle(const Vec2& v) const
 	{
-		return { Math::DeltaAngle(x, v.x), Math::DeltaAngle(y, v.y) };
+		auto deltaAngle = [](const float flAngleA, const float flAngleB)
+			{
+				float flOut = fmodf((flAngleA - flAngleB) + 180.f, 360.f);
+				return flOut += flOut < 0 ? 180.f : -180.f;
+			};
+
+		return { deltaAngle(x, v.x), deltaAngle(y, v.y) };
 	}
 
 	inline Vec2 DeltaAngle(float v) const
 	{
-		return { Math::DeltaAngle(x, v), Math::DeltaAngle(y, v) };
+		auto deltaAngle = [](const float flAngleA, const float flAngleB)
+			{
+				float flOut = fmodf((flAngleA - flAngleB) + 180.f, 360.f);
+				return flOut += flOut < 0 ? 180.f : -180.f;
+			};
+
+		return { deltaAngle(x, v), deltaAngle(y, v) };
 	}
 
 	inline Vec2 LerpAngle(const Vec2& v, float t) const
 	{
-		return { Math::LerpAngle(x, v.x, t), Math::LerpAngle(y, v.y, t) };
+		auto shortDist = [](const float flAngleA, const float flAngleB)
+			{
+				const float flDelta = fmodf((flAngleA - flAngleB), 360.f);
+				return fmodf(2 * flDelta, 360.f) - flDelta;
+			};
+		return { x - shortDist(x, v.x) * t, y - shortDist(y, v.y) * t };
 	}
 
 	inline Vec2 LerpAngle(float v, float t) const
 	{
-		return { Math::LerpAngle(x, v, t), Math::LerpAngle(y, v, t) };
+		auto shortDist = [](const float flAngleA, const float flAngleB)
+			{
+				const float flDelta = fmodf((flAngleA - flAngleB), 360.f);
+				return fmodf(2 * flDelta, 360.f) - flDelta;
+			};
+		return { x - shortDist(x, v) * t, y - shortDist(y, v) * t };
 	}
 
 	inline float Length(void) const
@@ -292,23 +258,6 @@ public:
 	inline float LengthSqr(void) const
 	{
 		return (x * x + y * y);
-	}
-
-	inline float Normalize()
-	{
-		float flLength = Length();
-		float flLengthNormal = 1.f / (FLT_EPSILON + flLength);
-
-		x *= flLengthNormal;
-		y *= flLengthNormal;
-
-		return flLength;
-	}
-
-	inline Vec2 Normalized() const
-	{
-		float flLengthNormal = 1.f / (FLT_EPSILON + Length());
-		return Vec2(x * flLengthNormal, y * flLengthNormal);
 	}
 
 	inline float DistTo(const Vec2& v) const
@@ -326,11 +275,6 @@ public:
 		return x * v.x + y * v.y;
 	}
 
-	inline float DotNormalized(const Vec2& v) const
-	{
-		return (x * v.x + y * v.y) / (Length() * v.Length());
-	}
-
 	inline bool IsZero(float flEpsilon = 0.001f) const
 	{
 		return fabsf(x) < flEpsilon &&
@@ -342,22 +286,6 @@ using Vector2D = Vec2;
 class Vec3
 {
 public:
-	static inline Vec3 Get(float v = 0.f)
-	{
-		return { v, v, v };
-	}
-
-	static inline Vec3 GetMin()
-	{
-		return Get(-FLT_MAX);
-	}
-
-	static inline Vec3 GetMax()
-	{
-		return Get(FLT_MAX);
-	}
-
-public:
 	float x = 0.f, y = 0.f, z = 0.f;
 
 public:
@@ -368,32 +296,32 @@ public:
 
 	inline Vec3(float X = 0.f, float Y = 0.f, float Z = 0.f)
 	{
-		x = X, y = Y, z = Z;
+		x = X; y = Y; z = Z;
 	}
 
 	inline Vec3(float* v)
 	{
-		x = v[0], y = v[1], z = v[2];
+		x = v[0]; y = v[1]; z = v[2];
 	}
 
 	inline Vec3(const float* v)
 	{
-		x = v[0], y = v[1], z = v[2];
+		x = v[0]; y = v[1]; z = v[2];
 	}
 
 	inline Vec3(const Vec3& v)
 	{
-		x = v.x, y = v.y, z = v.z;
+		x = v.x; y = v.y; z = v.z;
 	}
 
 	inline Vec3(const Vec2& v)
 	{
-		x = v.x, y = v.y, z = 0.f;
+		x = v.x; y = v.y; z = 0.f;
 	}
 
 	inline Vec3& operator=(const Vec3& v)
 	{
-		x = v.x, y = v.y, z = v.z; return *this;
+		x = v.x; y = v.y; z = v.z; return *this;
 	}
 
 	inline float& operator[](int i)
@@ -423,42 +351,42 @@ public:
 
 	inline Vec3& operator+=(const Vec3& v)
 	{
-		x += v.x, y += v.y, z += v.z; return *this;
+		x += v.x; y += v.y; z += v.z; return *this;
 	}
 
 	inline Vec3& operator-=(const Vec3& v)
 	{
-		x -= v.x, y -= v.y, z -= v.z; return *this;
+		x -= v.x; y -= v.y; z -= v.z; return *this;
 	}
 
 	inline Vec3& operator*=(const Vec3& v)
 	{
-		x *= v.x, y *= v.y, z *= v.z; return *this;
+		x *= v.x; y *= v.y; z *= v.z; return *this;
 	}
 
 	inline Vec3& operator/=(const Vec3& v)
 	{
-		x /= v.x, y /= v.y, z /= v.z; return *this;
+		x /= v.x; y /= v.y; z /= v.z; return *this;
 	}
 
 	inline Vec3& operator+=(float v)
 	{
-		x += v, y += v, z += v; return *this;
+		x += v; y += v; z += v; return *this;
 	}
 
 	inline Vec3& operator-=(float v)
 	{
-		x -= v, y -= v, z -= v; return *this;
+		x -= v; y -= v; z -= v; return *this;
 	}
 
 	inline Vec3& operator*=(float v)
 	{
-		x *= v, y *= v, z *= v; return *this;
+		x *= v; y *= v; z *= v; return *this;
 	}
 
 	inline Vec3& operator/=(float v)
 	{
-		x /= v, y /= v, z /= v; return *this;
+		x /= v; y /= v; z /= v; return *this;
 	}
 
 	inline Vec3 operator+(const Vec3& v) const
@@ -486,19 +414,9 @@ public:
 		return Vec3(x + v, y + v, z + v);
 	}
 
-	inline friend Vec3 operator+(float l, const Vec3& r)
-	{
-		return Vec3(l + r.x, l + r.y, l + r.z);
-	}
-
 	inline Vec3 operator-(float v) const
 	{
 		return Vec3(x - v, y - v, z - v);
-	}
-
-	inline friend Vec3 operator-(float l, const Vec3& r)
-	{
-		return Vec3(l - r.x, l - r.y, l - r.z);
 	}
 
 	inline Vec3 operator*(float v) const
@@ -506,69 +424,19 @@ public:
 		return Vec3(x * v, y * v, z * v);
 	}
 
-	inline friend Vec3 operator*(float l, const Vec3& r)
-	{
-		return Vec3(l * r.x, l * r.y, l * r.z);
-	}
-
 	inline Vec3 operator/(float v) const
 	{
 		return Vec3(x / v, y / v, z / v);
 	}
 
-	inline friend Vec3 operator/(float l, const Vec3& r)
-	{
-		return Vec3(l / r.x, l / r.y, l / r.z);
-	}
-
-	inline Vec3 operator-() const
-	{
-		return Vec3(-x, -y, -z);
-	}
-
 	inline void Set(float X = 0.f, float Y = 0.f, float Z = 0.f)
 	{
-		x = X, y = Y, z = Z;
-	}
-
-	inline void Set(const Vec3& v)
-	{
-		x = v.x, y = v.y, z = v.z;
-	}
-
-	inline void Set(const Vec2& v)
-	{
-		x = v.x, y = v.y;
-	}
-
-	inline void Set2D(const Vec3& v)
-	{
-		x = v.x, y = v.y;
+		x = X; y = Y; z = Z;
 	}
 
 	inline Vec3 To2D() const
 	{
 		return { x, y };
-	}
-
-	inline Vec3 Get2D() const
-	{
-		return Vec3(x, y, 0);
-	}
-
-	inline Vec3 Pow(float flPower) const
-	{
-		return Vec3(powf(x, flPower), powf(y, flPower), powf(z, flPower));
-	}
-
-	inline float Min() const
-	{
-		return std::min<float>(x, std::min<float>(y, z));
-	}
-
-	inline float Max() const
-	{
-		return std::max<float>(x, std::max<float>(y, z));
 	}
 
 	inline Vec3 Min(const Vec3& v) const
@@ -584,6 +452,16 @@ public:
 	inline Vec3 Clamp(const Vec3& v1, const Vec3& v2) const
 	{
 		return Max(v1).Min(v2);
+	}
+
+	inline float Min() const
+	{
+		return std::min<float>(x, std::min<float>(y, z));
+	}
+
+	inline float Max() const
+	{
+		return std::max<float>(x, std::max<float>(y, z));
 	}
 
 	inline Vec3 Min(float v) const
@@ -603,32 +481,54 @@ public:
 
 	inline Vec3 Lerp(const Vec3& v, float t) const
 	{
-		return { Math::Lerp(x, v.x, t), Math::Lerp(y, v.y, t), Math::Lerp(z, v.z, t) };
+		return { x + (v.x - x) * t, y + (v.y - y) * t, z + (v.z - z) * t };
 	}
 
 	inline Vec3 Lerp(float v, float t) const
 	{
-		return { Math::Lerp(x, v, t), Math::Lerp(y, v, t), Math::Lerp(z, v, t) };
+		return { x + (v - x) * t, y + (v - y) * t, z + (v - z) * t };
 	}
 
 	inline Vec3 DeltaAngle(const Vec3& v) const
 	{
-		return { Math::DeltaAngle(x, v.x), Math::DeltaAngle(y, v.y), Math::DeltaAngle(z, v.z) };
+		auto deltaAngle = [](const float flAngleA, const float flAngleB)
+			{
+				float flOut = fmodf((flAngleA - flAngleB) + 180.f, 360.f);
+				return flOut += flOut < 0 ? 180.f : -180.f;
+			};
+
+		return { deltaAngle(x, v.x), deltaAngle(y, v.y), deltaAngle(z, v.z) };
 	}
 
 	inline Vec3 DeltaAngle(float v) const
 	{
-		return { Math::DeltaAngle(x, v), Math::DeltaAngle(y, v), Math::DeltaAngle(z, v) };
+		auto deltaAngle = [](const float flAngleA, const float flAngleB)
+			{
+				float flOut = fmodf((flAngleA - flAngleB) + 180.f, 360.f);
+				return flOut += flOut < 0 ? 180.f : -180.f;
+			};
+
+		return { deltaAngle(x, v), deltaAngle(y, v), deltaAngle(z, v) };
 	}
 
 	inline Vec3 LerpAngle(const Vec3& v, float t) const
 	{
-		return { Math::LerpAngle(x, v.x, t), Math::LerpAngle(y, v.y, t), Math::LerpAngle(z, v.z, t) };
+		auto shortDist = [](const float flAngleA, const float flAngleB)
+			{
+				const float flDelta = fmodf((flAngleA - flAngleB), 360.f);
+				return fmodf(2 * flDelta, 360.f) - flDelta;
+			};
+		return { x - shortDist(x, v.x) * t, y - shortDist(y, v.y) * t, z - shortDist(z, v.z) * t };
 	}
 
 	inline Vec3 LerpAngle(float v, float t) const
 	{
-		return { Math::LerpAngle(x, v, t), Math::LerpAngle(y, v, t), Math::LerpAngle(z, v, t) };
+		auto shortDist = [](const float flAngleA, const float flAngleB)
+			{
+				const float flDelta = fmodf((flAngleA - flAngleB), 360.f);
+				return fmodf(2 * flDelta, 360.f) - flDelta;
+			};
+		return { x - shortDist(x, v) * t, y - shortDist(y, v) * t, z - shortDist(z, v) * t };
 	}
 
 	inline float Length(void) const
@@ -639,16 +539,6 @@ public:
 	inline float LengthSqr(void) const
 	{
 		return (x * x + y * y + z * z);
-	}
-
-	inline float Length2D(void) const
-	{
-		return sqrtf(x * x + y * y);
-	}
-
-	inline float Length2DSqr(void) const
-	{
-		return (x * x + y * y);
 	}
 
 	inline float Normalize()
@@ -675,16 +565,31 @@ public:
 		return flLength;
 	}
 
-	inline Vec3 Normalized() const
+	inline Vec3 Normalized()
 	{
 		float flLengthNormal = 1.f / (FLT_EPSILON + Length());
 		return Vec3(x * flLengthNormal, y * flLengthNormal, z * flLengthNormal);
 	}
 
-	inline Vec3 Normalized2D() const
+	inline Vec3 Normalized2D()
 	{
 		float flLengthNormal = 1.f / (FLT_EPSILON + Length2D());
 		return Vec3(x * flLengthNormal, y * flLengthNormal);
+	}
+
+	inline Vec3 Get2D()
+	{
+		return Vec3(x, y, 0);
+	}
+
+	inline float Length2D(void) const
+	{
+		return sqrtf(x * x + y * y);
+	}
+
+	inline float Length2DSqr(void) const
+	{
+		return (x * x + y * y);
 	}
 
 	inline float DistTo(const Vec3& v) const
@@ -712,11 +617,6 @@ public:
 		return x * v.x + y * v.y + z * v.z;
 	}
 
-	inline float DotNormalized(const Vec3& v) const
-	{
-		return (x * v.x + y * v.y + z * v.z) / (Length() * v.Length());
-	}
-
 	inline Vec3 Cross(const Vec3& v) const
 	{
 		return Vec3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
@@ -731,15 +631,15 @@ public:
 
 	inline Vec3 ToAngle() const noexcept
 	{
-		return { Math::Rad2Deg(atan2(-z, hypot(x, y))),
-				 Math::Rad2Deg(atan2(y, x)),
+		return { RAD2DEG(atan2(-z, hypot(x, y))),
+				 RAD2DEG(atan2(y, x)),
 				 0.f };
 	}
 	inline Vec3 FromAngle() const noexcept
 	{
-		return { cos(Math::Deg2Rad(x)) * cos(Math::Deg2Rad(y)),
-				 cos(Math::Deg2Rad(x)) * sin(Math::Deg2Rad(y)),
-				 -sin(Math::Deg2Rad(x)) };
+		return { cos(DEG2RAD(x)) * cos(DEG2RAD(y)),
+				 cos(DEG2RAD(x))* sin(DEG2RAD(y)),
+				 -sin(DEG2RAD(x)) };
 	}
 };
 using Vector = Vec3;
@@ -765,6 +665,12 @@ public:
 	}
 
 private:
+	static inline void SinCos(float flRadians, float* pSin, float* pCos)
+	{
+		*pSin = std::sin(flRadians);
+		*pCos = std::cos(flRadians);
+	}
+
 	static inline void Vector3DMultiplyPosition(const VMatrix& src1, const Vector src2, Vector& dst)
 	{
 		dst[0] = src1[0][0] * src2.x + src1[0][1] * src2.y + src1[0][2] * src2.z + src1[0][3];
@@ -775,9 +681,10 @@ private:
 	static inline void SetupMatrixAnglesInternal(float m2[4][4], const QAngle& vAngles)
 	{
 		float sr, sp, sy, cr, cp, cy;
-		Math::SinCos(Math::Deg2Rad(vAngles[1]), sy, cy);
-		Math::SinCos(Math::Deg2Rad(vAngles[0]), sp, cp);
-		Math::SinCos(Math::Deg2Rad(vAngles[2]), sr, cr);
+
+		SinCos(DEG2RAD(vAngles[1]), &sy, &cy);
+		SinCos(DEG2RAD(vAngles[0]), &sp, &cp);
+		SinCos(DEG2RAD(vAngles[2]), &sr, &cr);
 
 		// matrix = (YAW * PITCH) * ROLL
 		m2[0][0] = cp * cy;
@@ -906,7 +813,7 @@ struct FloatRange_t
 
 namespace LerpEnum {
 	enum LerpEnum {
-		All, NoAlpha, Alpha, HSV, HSVNoAlpha
+		All, NoAlpha, Alpha
 	};
 };
 using byte = unsigned char;
@@ -936,7 +843,7 @@ struct Color_t
 			flR = flG = flB = flV;
 		else
 		{
-			int i = int(flH /= 60);
+			int i = int(floor(flH /= 60));
 			float flF = flH - i;
 			float flP = flV * (1 - flS);
 			float flQ = flV * (1 - flF * flS);
@@ -959,7 +866,7 @@ struct Color_t
 		a = byte(std::clamp(flA, 0.f, 255.f));
 	}
 
-	inline void GetHSV(float& flH, float& flS, float& flV) const
+	inline void GetHSV(float& flH, float& flS, float& flV)
 	{
 		float flR = r / 255.f;
 		float flG = g / 255.f;
@@ -987,21 +894,21 @@ struct Color_t
 		flV = flR * 100;
 	}
 
-	inline Color_t HueShift(float flShift) const
+	inline Color_t HueShift(float flShift)
 	{
 		float flH, flS, flV; GetHSV(flH, flS, flV);
 		Color_t tOut; tOut.SetHSV(fmodf(flH + flShift, 360.f), flS, flV, a);
 		return tOut;
 	}
 
-	inline bool operator==(const Color_t t) const
+	inline bool operator==(Color_t other) const
 	{
-		return r == t.r && g == t.g && b == t.b && a == t.a;
+		return r == other.r && g == other.g && b == other.b && a == other.a;
 	}
 
-	inline bool operator!=(const Color_t t) const
+	inline bool operator!=(Color_t other) const
 	{
-		return r != t.r || g != t.g || b != t.b || a != t.a;
+		return r != other.r || g != other.g || b != other.b || a != other.a;
 	}
 
 	inline std::string ToHex() const
@@ -1021,16 +928,16 @@ struct Color_t
 		{
 		default:
 			return {
-				byte(Math::Lerp(r, to.r, t)),
-				byte(Math::Lerp(g, to.g, t)),
-				byte(Math::Lerp(b, to.b, t)),
-				byte(Math::Lerp(a, to.a, t))
+				byte(r + (to.r - r) * t),
+				byte(g + (to.g - g) * t),
+				byte(b + (to.b - b) * t),
+				byte(a + (to.a - a) * t)
 			};
 		case LerpEnum::NoAlpha:
 			return {
-				byte(Math::Lerp(r, to.r, t)),
-				byte(Math::Lerp(g, to.g, t)),
-				byte(Math::Lerp(b, to.b, t)),
+				byte(r + (to.r - r) * t),
+				byte(g + (to.g - g) * t),
+				byte(b + (to.b - b) * t),
 				byte(a)
 			};
 		case LerpEnum::Alpha:
@@ -1038,17 +945,8 @@ struct Color_t
 				r,
 				g,
 				b,
-				byte(Math::Lerp(a, to.a, t))
+				byte(a + (to.a - a) * t)
 			};
-		case LerpEnum::HSV:
-		case LerpEnum::HSVNoAlpha:
-		{
-			float flHFrom, flSFrom, flVFrom; GetHSV(flHFrom, flSFrom, flVFrom);
-			float flHTo, flSTo, flVTo; to.GetHSV(flHTo, flSTo, flVTo);
-			float flAOut = (eLerp == LerpEnum::HSV ? Math::Lerp(a, to.a, t) : a) * 255.f;
-			Color_t tOut; tOut.SetHSV(fnmodf(Math::LerpAngle(flHFrom - 180, flHTo - 180, t) + 180, 360), Math::Lerp(flSFrom, flSTo, t), Math::Lerp(flVFrom, flVTo, t), flAOut);
-			return tOut;
-		}
 		}
 	}
 
@@ -1060,11 +958,6 @@ struct Color_t
 	inline Color_t Alpha(byte to) const
 	{
 		return { r, g, b, to };
-	}
-
-	inline Color_t Inverse() const
-	{
-		return Color_t(255 - r, 255 - g, 255 - b, a);
 	}
 
 	inline float Brightness(float flRed = 0.299f, float flGreen = 0.587f, float flBlue = 0.114f) const
@@ -1088,24 +981,19 @@ struct Gradient_t
 	Color_t StartColor = {};
 	Color_t EndColor = {};
 
-	inline bool operator==(const Gradient_t& t) const
+	inline bool operator==(Gradient_t other) const
 	{
-		return StartColor == t.StartColor && EndColor == t.EndColor;
+		return StartColor == other.StartColor && EndColor == other.EndColor;
 	}
 
-	inline bool operator!=(const Gradient_t& t) const
+	inline bool operator!=(Gradient_t other) const
 	{
-		return StartColor != t.StartColor || EndColor != t.EndColor;
+		return StartColor != other.StartColor || EndColor != other.EndColor;
 	}
 };
 
 struct Chams_t
 {
-private:
-	static inline const std::vector<std::pair<std::string, Color_t>> s_vNone = std::vector<std::pair<std::string, Color_t>>{ { "None", {} } };
-	static inline const std::vector<std::pair<std::string, Color_t>> s_vOriginal = std::vector<std::pair<std::string, Color_t>>{ { "Original", {} } };
-
-public:
 	std::vector<std::pair<std::string, Color_t>> Visible = { { "Original", Color_t() } };
 	std::vector<std::pair<std::string, Color_t>> Occluded = {};
 
@@ -1119,26 +1007,16 @@ public:
 		return Visible != t.Visible || Occluded != t.Occluded;
 	}
 
-	inline bool operator()(bool bDefault = true) const
+	inline bool operator()(bool bVisibleOnly = false) const
 	{
-		return (bDefault ? Visible != s_vOriginal : !Visible.empty()) || !Occluded.empty();
-	}
-
-	const std::vector<std::pair<std::string, Color_t>>& GetVisible() const
-	{
-		return !Visible.empty() ? Visible : s_vNone;
-	}
-
-	const std::vector<std::pair<std::string, Color_t>>& GetOccluded() const
-	{
-		return !Occluded.empty() ? Occluded : s_vNone;
+		return bVisibleOnly ? !Visible.empty() : Visible != std::vector<std::pair<std::string, Color_t>>{ { "Original", Color_t() } } || !Occluded.empty();
 	}
 };
 
 struct Glow_t
 {
-	int Stencil = 0;
-	float Blur = 0;
+	int		Stencil = 0;
+	float	Blur = 0;
 
 	inline bool operator==(const Glow_t& t) const
 	{

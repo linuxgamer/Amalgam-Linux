@@ -1,15 +1,10 @@
 #pragma once
 #include "../../../SDK/SDK.h"
 
-Enum(Model, Visible, Occluded);
-
 class CChams
 {
 private:
-	void Begin();
-	void End();
-
-	void DrawModel(CBaseEntity* pEntity, const Chams_t& tChams, IMatRenderContext* pRenderContext, int iModel = ModelEnum::Visible, bool bTwoModel = false);
+	void DrawModel(CBaseEntity* pEntity, Chams_t& tChams, IMatRenderContext* pRenderContext, bool bTwoModels = true);
 
 	void RenderBacktrack(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo);
 	void RenderFakeAngle(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo);
@@ -17,7 +12,7 @@ private:
 	struct ChamsInfo_t
 	{
 		CBaseEntity* m_pEntity;
-		Chams_t* m_pChams;
+		Chams_t m_tChams;
 		int m_iFlags = 0;
 	};
 	std::vector<ChamsInfo_t> m_vEntities = {};
@@ -34,12 +29,17 @@ public:
 	void RenderMain();
 	void RenderHandler(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
 
-	bool RenderViewmodel(void* rcx, int flags, int* iReturn);
+	bool RenderViewmodel(void* ecx, int flags, int* iReturn);
 	bool RenderViewmodel(const DrawModelState_t& pState, const ModelRenderInfo_t& pInfo, matrix3x4* pBoneToWorld);
+
+	// Model Preview: draw chams onto an arbitrary (out-of-entity-list) entity into the caller's
+	// already-pushed render target/view. Visible-only (no stencil) to keep it simple - the preview
+	// has nothing to occlude it. Mirrors the live overlay-on-base-model look.
+	void DrawPreview(CBaseEntity* pEntity, Chams_t& tChams, IMatRenderContext* pRenderContext) { DrawModel(pEntity, tChams, pRenderContext, false); }
 
 	bool m_bRendering = false;
 
-	std::unordered_mapset<int> m_mEntities = {};
+	std::unordered_map<int, bool> m_mEntities = {};
 };
 
 ADD_FEATURE(CChams, Chams);

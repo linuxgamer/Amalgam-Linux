@@ -1,4 +1,5 @@
 #pragma once
+#include "INetMessage.h"
 
 class INetChannel;
 

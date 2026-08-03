@@ -5,8 +5,16 @@ MAKE_SIGNATURE(CClientState_GetClientInterpAmount, "engine.dll", "48 83 EC ? 48 
 MAKE_HOOK(CClientState_GetClientInterpAmount, S::CClientState_GetClientInterpAmount(), float,
 	CClientState* rcx)
 {
-	DEBUG_RETURN(CClientState_GetClientInterpAmount, rcx);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CClientState_GetClientInterpAmount[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx);
+#endif
 
 	G::Lerp = CALL_ORIGINAL(rcx);
-	return 0.f;
+
+	// Only strip the engine interpolation amount when an interp feature actually wants it gone.
+	if (Vars::Visuals::Removals::Lerp.Value || Vars::Visuals::Removals::Interpolation.Value)
+		return 0.f;
+
+	return G::Lerp;
 }

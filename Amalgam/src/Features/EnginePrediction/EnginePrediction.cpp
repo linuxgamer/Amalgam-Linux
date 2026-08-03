@@ -1,34 +1,36 @@
 #include "EnginePrediction.h"
 
 #include "../Ticks/Ticks.h"
-#include "../Simulation/MovementSimulation/MovementSimulation.h"
 
 // account for interp and origin compression when simulating local player
 void CEnginePrediction::AdjustPlayers(CBaseEntity* pLocal)
 {
-	m_mRestore.clear();
+	auto& vGroup = H::Entities.GetGroup(EntityEnum::PlayerAll);
 
-	for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerAll))
+	m_vRestore.clear();
+	m_vRestore.reserve(vGroup.size());
+
+	for (auto pEntity : vGroup)
 	{
 		auto pPlayer = pEntity->As<CTFPlayer>();
-		if (pPlayer == pLocal || !pPlayer->IsAlive() || pPlayer->IsAGhost())
-			continue;
+		if (pPlayer == pLocal || pPlayer->IsDormant() || !pPlayer->IsAlive() || pPlayer->IsAGhost())			continue;
 
-		m_mRestore[pPlayer] = { pPlayer->GetAbsOrigin(), pPlayer->m_vecMins(), pPlayer->m_vecMaxs() };
+		m_vRestore.emplace_back(pPlayer, RestoreInfo_t{ pPlayer->GetAbsOrigin(), pPlayer->m_vecMins(), pPlayer->m_vecMaxs() });
 
 		pPlayer->SetAbsOrigin(pPlayer->m_vecOrigin());
-		pPlayer->m_vecMins() += PLAYER_ORIGIN_COMPRESSION;
-		pPlayer->m_vecMaxs() -= PLAYER_ORIGIN_COMPRESSION;
+		pPlayer->m_vecMins() += 0.125f;
+		pPlayer->m_vecMaxs() -= 0.125f;
 	}
 }
 void CEnginePrediction::RestorePlayers()
 {
-	for (auto& [pPlayer, tRestore] : m_mRestore)
+	for (auto& [pPlayer, tRestore] : m_vRestore)
 	{
 		pPlayer->SetAbsOrigin(tRestore.m_vOrigin);
 		pPlayer->m_vecMins() = tRestore.m_vMins;
 		pPlayer->m_vecMaxs() = tRestore.m_vMaxs;
 	}
+	m_vRestore.clear();
 }
 
 void CEnginePrediction::Simulate(CTFPlayer* pLocal, CUserCmd* pCmd)
@@ -39,28 +41,44 @@ void CEnginePrediction::Simulate(CTFPlayer* pLocal, CUserCmd* pCmd)
 
 	I::MoveHelper->SetHost(pLocal);
 	pLocal->m_pCurrentCommand() = pCmd;
-	G::RandomSeed() = MD5_PseudoRandom(pCmd->command_number) & std::numeric_limits<int>::max();
+	if (pCmd->command_number != m_nSeedCommandNumber)
+	{
+		m_nSeedCommandNumber = pCmd->command_number;
+		m_iSeed = MD5_PseudoRandom(pCmd->command_number) & std::numeric_limits<int>::max();
+	}
+	*G::RandomSeed() = m_iSeed;
 
 	I::Prediction->m_bFirstTimePredicted = false;
 	I::Prediction->m_bInPrediction = true;
 	I::Prediction->SetLocalViewAngles(pCmd->viewangles);
 
-	AdjustPlayers(pLocal);
+	const bool bBatched = m_iBatchDepth > 0;
+	if (!bBatched || !m_bBatchAdjusted)
+	{
+		AdjustPlayers(pLocal);
+		m_bBatchAdjusted = bBatched;
+	}
 	I::Prediction->SetupMove(pLocal, pCmd, I::MoveHelper, &m_tMoveData);
 	I::GameMovement->ProcessMovement(pLocal, &m_tMoveData);
 	I::Prediction->FinishMove(pLocal, pCmd, &m_tMoveData);
-	RestorePlayers();
+	if (!bBatched)
+		RestorePlayers();
 
 	I::MoveHelper->SetHost(nullptr);
 	pLocal->m_pCurrentCommand() = nullptr;
-	G::RandomSeed() = -1;
+	*G::RandomSeed() = -1;
 
 	pLocal->m_nTickBase() = nOldTickBase;
 	I::Prediction->m_bFirstTimePredicted = bOldIsFirstPrediction;
 	I::Prediction->m_bInPrediction = bOldInPrediction;
 
-	if (static int nLastTickBase = 0; nLastTickBase != nOldTickBase)
-		F::MoveSim.StorePlayer(pLocal, m_tMoveData, TICKS_TO_TIME(nOldTickBase)), nLastTickBase = nOldTickBase;
+	//if (static int nLastTickBase = 0; nLastTickBase != nOldTickBase)
+    //F::MoveSim.StorePlayer(pLocal, m_tMoveData, TICKS_TO_TIME(nOldTickBase)), nLastTickBase = nOldTickBase;
+
+	m_vOrigin = m_tMoveData.m_vecAbsOrigin;
+	m_vVelocity = m_tMoveData.m_vecVelocity;
+	m_vDirection = { m_tMoveData.m_flForwardMove, -m_tMoveData.m_flSideMove, m_tMoveData.m_flUpMove };
+	m_vAngles = m_tMoveData.m_vecViewAngles;
 }
 
 
@@ -117,6 +135,20 @@ void CEnginePrediction::End(CTFPlayer* pLocal, CUserCmd* pCmd)
 
 	CPredictionCopy copy = { PC_EVERYTHING, pLocal, PC_DATA_NORMAL, m_tLocal.m_pData, PC_DATA_PACKED };
 	copy.TransferData("EnginePredictionEnd", pLocal->entindex(), pMap);
+}
+
+float CEnginePrediction::GetTargetPredictZVelocity() const
+{
+	// Interval-derived one-tick "landed on a surface" velocity, matching the earliest WORKING
+	// TextureBug (bak_20260602_110801): -(sv_gravity * interval_per_tick * 0.5) = -6.0 on TF2.
+	static auto sv_gravity = H::ConVars.FindVar("sv_gravity");
+	const float flGravity = sv_gravity ? sv_gravity->GetFloat() : 800.f;
+	return -(flGravity * I::GlobalVars->interval_per_tick * 0.5f);
+}
+
+bool CEnginePrediction::IsTargetPredictZVelocity(float flVz, float flEpsilon) const
+{
+	return fabsf(flVz - GetTargetPredictZVelocity()) <= flEpsilon;
 }
 
 void CEnginePrediction::Unload()

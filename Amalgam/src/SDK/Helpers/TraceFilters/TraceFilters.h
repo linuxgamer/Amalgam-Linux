@@ -1,8 +1,5 @@
 #pragma once
 #include "../../Definitions/Interfaces/IEngineTrace.h"
-#include "../../Definitions/Definitions.h"
-
-class CBaseEntity;
 
 enum
 {
@@ -32,7 +29,7 @@ enum
 class CTraceFilterHitscan : public ITraceFilter
 {
 public:
-	bool ShouldHitEntity(IHandleEntity* pHandleEntity, int nContentsMask) override;
+	bool ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask) override;
 	TraceType_t GetTraceType() const override;
 	CBaseEntity* pSkip = nullptr;
 
@@ -46,7 +43,7 @@ public:
 class CTraceFilterCollideable : public ITraceFilter
 {
 public:
-	bool ShouldHitEntity(IHandleEntity* pHandleEntity, int nContentsMask) override;
+	bool ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask) override;
 	TraceType_t GetTraceType() const override;
 	CBaseEntity* pSkip = nullptr;
 
@@ -63,7 +60,22 @@ public:
 class CTraceFilterWorldAndPropsOnly : public ITraceFilter
 {
 public:
-	bool ShouldHitEntity(IHandleEntity* pHandleEntity, int nContentsMask) override;
+	bool ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask) override;
+	TraceType_t GetTraceType() const override;
+	CBaseEntity* pSkip = nullptr;
+
+	int iTeam = -1;
+};
+
+// World + brush entities (func_brush, doors, trains, conveyors...) but NOT studio model props
+// (prop_dynamic / prop_physics / prop_physics_multiplayer). Same as CTraceFilterWorldAndPropsOnly
+// minus the model-prop classes. Used by texture bug / wall climb / air stuck so they ignore the
+// models they can't work on (and don't waste bruteforce on them) while still engaging on real
+// brush geometry.
+class CTraceFilterWorldAndBrushOnly : public ITraceFilter
+{
+public:
+	bool ShouldHitEntity(IHandleEntity* pServerEntity, int nContentsMask) override;
 	TraceType_t GetTraceType() const override;
 	CBaseEntity* pSkip = nullptr;
 

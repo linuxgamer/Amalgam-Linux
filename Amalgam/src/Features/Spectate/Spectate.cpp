@@ -1,10 +1,5 @@
 #include "Spectate.h"
 
-void CSpectate::Reset()
-{
-	m_iIntendedTarget = m_iTarget = -1;
-}
-
 void CSpectate::NetUpdateEnd(CTFPlayer* pLocal)
 {
 	if (!pLocal)
@@ -12,13 +7,13 @@ void CSpectate::NetUpdateEnd(CTFPlayer* pLocal)
 
 	m_iTarget = m_iIntendedTarget;
 	CTFPlayer* pEntity = nullptr;
-	if (HasTarget())
+	if (m_iTarget != -1)
 	{
 		pEntity = I::ClientEntityList->GetClientEntity(I::EngineClient->GetPlayerForUserID(m_iTarget))->As<CTFPlayer>();
 		if (pEntity == pLocal)
 			m_iTarget = m_iIntendedTarget = -1;
 	}
-	if (!HasTarget())
+	if (m_iTarget == -1)
 	{
 		if (pLocal->IsAlive() && pLocal->m_hObserverTarget())
 		{
@@ -44,11 +39,14 @@ void CSpectate::NetUpdateEnd(CTFPlayer* pLocal)
 	}
 	pLocal->m_iObserverMode() = Vars::Visuals::Thirdperson::Enabled.Value ? OBS_MODE_THIRDPERSON : OBS_MODE_FIRSTPERSON;
 	Vars::Visuals::Thirdperson::Enabled.Value ? I::Input->CAM_ToThirdPerson() : I::Input->CAM_ToFirstPerson();
+
+	m_hTargetTarget = pLocal->m_hObserverTarget();
+	m_iTargetMode = pLocal->m_iObserverMode();
 }
 
 void CSpectate::NetUpdateStart(CTFPlayer* pLocal)
 {
-	if (!pLocal || !HasTarget())
+	if (!pLocal || m_iTarget == -1)
 		return;
 
 	pLocal->m_hObserverTarget().Set(m_hOriginalTarget);
@@ -63,23 +61,18 @@ void CSpectate::CreateMove(CUserCmd* pCmd)
 
 	static bool bStaticView = false;
 	const bool bLastView = bStaticView;
-	const bool bCurrView = bStaticView = HasTarget();
-	if (!bCurrView && !bLastView)
-		m_vOldView = pCmd->viewangles;
-	else
+	const bool bCurrView = bStaticView = m_iTarget != -1;
+	if (!bCurrView)
 	{
-		if (!bCurrView)
+		if (bLastView)
 			I::EngineClient->SetViewAngles(m_vOldView);
-		pCmd->viewangles = m_vOldView;
+		m_vOldView = pCmd->viewangles;
 	}
+	else
+		pCmd->viewangles = m_vOldView;
 }
 
 void CSpectate::SetTarget(int iTarget)
 {
 	m_iIntendedTarget = m_iIntendedTarget == iTarget ? -1 : iTarget;
-}
-
-int CSpectate::GetTarget(bool bIntended)
-{
-	return bIntended ? m_iIntendedTarget : m_iTarget;
 }

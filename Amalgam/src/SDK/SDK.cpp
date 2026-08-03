@@ -1,14 +1,13 @@
 #include "SDK.h"
 
-#include "../Features/ImGui/Notifications/Notifications.h"
+#include "../Features/Visuals/Notifications/Notifications.h"
 #include "../Features/ImGui/Menu/Menu.h"
 #include "../Features/EnginePrediction/EnginePrediction.h"
-#include "../Features/Ticks/Ticks.h"
+#include <random>
 
 #pragma warning (disable : 6385)
 
-MAKE_SIGNATURE(CAttributeManager_AttribHookValue_Float, "client.dll", "4C 8B DC 49 89 5B ? 49 89 6B ? 56 57 41 54 41 56 41 57 48 83 EC ? 48 8B 3D ? ? ? ? 4C 8D 35", 0x0);
-MAKE_SIGNATURE(IHasGenericMeter_GetMeterMultiplier, "client.dll", "F3 0F 10 81 ? ? ? ? C3 CC CC CC CC CC CC CC 48 85 D2", 0x0);
+MAKE_SIGNATURE(CAttributeManager_AttribHookFloat, "client.dll", "4C 8B DC 49 89 5B ? 49 89 6B ? 56 57 41 54 41 56 41 57 48 83 EC ? 48 8B 3D ? ? ? ? 4C 8D 35", 0x0);
 
 static BOOL CALLBACK TeamFortressWindow(HWND hWindow, LPARAM lParam)
 {
@@ -35,7 +34,7 @@ static BOOL CALLBACK TeamFortressWindow(HWND hWindow, LPARAM lParam)
 
 
 void SDK::Output(const char* sFunction, const char* sLog, Color_t tColor,
-	int iTo, const char* sIcon, int iMessageBox,
+	int iTo, int iMessageBox,
 	const char* sLeft, const char* sRight)
 {
 	if (sLog)
@@ -48,7 +47,7 @@ void SDK::Output(const char* sFunction, const char* sLog, Color_t tColor,
 		if (iTo & OUTPUT_DEBUG)
 			OutputDebugString(std::format("{}{}{} {}\n", sLeft, sFunction, sRight, sLog).c_str());
 		if (iTo & OUTPUT_TOAST)
-			F::Notifications.Add(sLog, sIcon, tColor);
+			F::Notifications.Add(sLog, tColor);
 		if (iTo & OUTPUT_MENU)
 			F::Menu.AddOutput(std::format("{}{}{}", sLeft, sFunction, sRight).c_str(), sLog, tColor);
 		if (iTo & OUTPUT_CHAT)
@@ -65,7 +64,7 @@ void SDK::Output(const char* sFunction, const char* sLog, Color_t tColor,
 		if (iTo & OUTPUT_DEBUG)
 			OutputDebugString(std::format("{}\n", sFunction).c_str());
 		if (iTo & OUTPUT_TOAST)
-			F::Notifications.Add(sFunction, sIcon, tColor);
+			F::Notifications.Add(sFunction, tColor);
 		if (iTo & OUTPUT_MENU)
 			F::Menu.AddOutput("", sFunction, tColor);
 		if (iTo & OUTPUT_CHAT)
@@ -127,20 +126,20 @@ std::string SDK::GetTime()
 	return buffer;
 }
 
-std::wstring SDK::ConvertUtf8ToWide(const std::string& sSource)
+std::wstring SDK::ConvertUtf8ToWide(const std::string& source)
 {
-	int iSize = MultiByteToWideChar(CP_UTF8, 0, sSource.data(), -1, nullptr, 0);
-	std::wstring sResult(iSize, 0);
-	MultiByteToWideChar(CP_UTF8, 0, sSource.data(), -1, sResult.data(), iSize);
-	sResult.pop_back(); return sResult;
+	int size = MultiByteToWideChar(CP_UTF8, 0, source.data(), -1, nullptr, 0);
+	std::wstring result(size, 0);
+	MultiByteToWideChar(CP_UTF8, 0, source.data(), -1, result.data(), size);
+	return result;
 }
 
-std::string SDK::ConvertWideToUTF8(const std::wstring& sSource)
+std::string SDK::ConvertWideToUTF8(const std::wstring& source)
 {
-	int iSize = WideCharToMultiByte(CP_UTF8, 0, sSource.data(), -1, nullptr, 0, nullptr, nullptr);
-	std::string sResult(iSize, 0);
-	WideCharToMultiByte(CP_UTF8, 0, sSource.data(), -1, sResult.data(), iSize, nullptr, nullptr);
-	sResult.pop_back(); return sResult;
+	int size = WideCharToMultiByte(CP_UTF8, 0, source.data(), -1, nullptr, 0, nullptr, nullptr);
+	std::string result(size, 0);
+	WideCharToMultiByte(CP_UTF8, 0, source.data(), -1, result.data(), size, nullptr, nullptr);
+	return result;
 }
 
 HWND SDK::GetTeamFortressWindow()
@@ -157,19 +156,26 @@ bool SDK::IsGameWindowInFocus()
 	return hWindow == GetForegroundWindow() || !hWindow;
 }
 
-bool SDK::StdRandomBool()
+double SDK::PlatFloatTime()
 {
-	return StdRandomInt(0, 1);
+	static auto Plat_FloatTime = U::Memory.GetModuleExport<double(*)()>("tier0.dll", "Plat_FloatTime");
+	return Plat_FloatTime();
 }
+
 int SDK::StdRandomInt(int iMin, int iMax)
 {
-	std::uniform_int_distribution<int> iDistribution(iMin, iMax);
-	return iDistribution(Random);
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> distr(iMin, iMax);
+	return distr(gen);
 }
+
 float SDK::StdRandomFloat(float flMin, float flMax)
 {
-	std::uniform_real_distribution<float> flDistribution(flMin, flMax);
-	return flDistribution(Random);
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<float> distr(flMin, flMax);
+	return distr(gen);
 }
 
 int SDK::SeedFileLineHash(int iSeed, const char* sName, int iAdditionalSeed)
@@ -189,26 +195,23 @@ int SDK::SharedRandomInt(unsigned iSeed, const char* sName, int iMinVal, int iMa
 	I::UniformRandomStream->SetSeed(iSeed2);
 	return I::UniformRandomStream->RandomInt(iMinVal, iMaxVal);
 }
+
 void SDK::RandomSeed(int iSeed)
 {
 	static auto RandomSeed = U::Memory.GetModuleExport<void(*)(uint32_t)>("vstdlib.dll", "RandomSeed");
 	RandomSeed(iSeed);
 }
+
 int SDK::RandomInt(int iMinVal, int iMaxVal)
 {
 	static auto RandomInt = U::Memory.GetModuleExport<int(*)(int, int)>("vstdlib.dll", "RandomInt");
 	return RandomInt(iMinVal, iMaxVal);
 }
+
 float SDK::RandomFloat(float flMinVal, float flMaxVal)
 {
 	static auto RandomFloat = U::Memory.GetModuleExport<float(*)(float, float)>("vstdlib.dll", "RandomFloat");
 	return RandomFloat(flMinVal, flMaxVal);
-}
-
-double SDK::PlatFloatTime()
-{
-	static auto Plat_FloatTime = U::Memory.GetModuleExport<double(*)()>("tier0.dll", "Plat_FloatTime");
-	return Plat_FloatTime();
 }
 
 bool SDK::W2S(const Vec3& vOrigin, Vec3& vScreen, bool bAlways)
@@ -273,7 +276,7 @@ bool SDK::IsOnScreen(CBaseEntity* pEntity, const matrix3x4& mTransform, float* p
 	return !(flRight < 0 || flLeft > H::Draw.m_nScreenW || flTop < 0 || flBottom > H::Draw.m_nScreenH);
 }
 
-bool SDK::IsOnScreen(CBaseEntity* pEntity, const Vec3& vOrigin, bool bAll)
+bool SDK::IsOnScreen(CBaseEntity* pEntity, Vec3 vOrigin, bool bAll)
 {
 	float flLeft = 0.f, flRight = 0.f, flTop = 0.f, flBottom = 0.f;
 
@@ -320,7 +323,7 @@ bool SDK::IsOnScreen(CBaseEntity* pEntity, bool bShouldGetOwner)
 			pEntity = pOwner;
 	}
 
-	return IsOnScreen(pEntity, pEntity->GetAbsOrigin());
+	return IsOnScreen(pEntity, pEntity->entindex() == I::EngineClient->GetLocalPlayer() && !I::EngineClient->IsPlayingDemo() ? F::EnginePrediction.m_vOrigin : pEntity->GetAbsOrigin());
 }
 
 void SDK::Trace(const Vec3& vStart, const Vec3& vEnd, unsigned int nMask, ITraceFilter* pFilter, CGameTrace* pTrace)
@@ -386,7 +389,7 @@ bool SDK::VisPosWorld(CBaseEntity* pSkip, const CBaseEntity* pEntity, const Vec3
 	return true;
 }
 
-Vec3 SDK::PredictOrigin(const Vec3& vOrigin, const Vec3& vVelocity, float flLatency, bool bTrace, const Vec3& vMins, const Vec3& vMaxs, unsigned int nMask, float flNormal)
+Vec3 SDK::PredictOrigin(Vec3& vOrigin, Vec3 vVelocity, float flLatency, bool bTrace, Vec3 vMins, Vec3 vMaxs, unsigned int nMask, float flNormal)
 {
 	if (vVelocity.IsZero() || !flLatency)
 		return vOrigin;
@@ -402,7 +405,7 @@ Vec3 SDK::PredictOrigin(const Vec3& vOrigin, const Vec3& vVelocity, float flLate
 	return trace.endpos + (flNormal ? trace.plane.normal * flNormal : Vec3());
 }
 
-bool SDK::PredictOrigin(Vec3& vOut, const Vec3& vOrigin, const Vec3& vVelocity, float flLatency, bool bTrace, const Vec3& vMins, const Vec3& vMaxs, unsigned int nMask, float flNormal)
+bool SDK::PredictOrigin(Vec3& vOut, Vec3& vOrigin, Vec3 vVelocity, float flLatency, bool bTrace, Vec3 vMins, Vec3 vMaxs, unsigned int nMask, float flNormal)
 {
 	vOut = vOrigin;
 	if (vVelocity.IsZero() || !flLatency)
@@ -418,18 +421,6 @@ bool SDK::PredictOrigin(Vec3& vOut, const Vec3& vOrigin, const Vec3& vVelocity, 
 	SDK::TraceHull(vOrigin, vOut, vMins, vMaxs, nMask, &filter, &trace);
 	vOut = trace.endpos + (flNormal ? trace.plane.normal * flNormal : Vec3());
 	return !trace.DidHit();
-}
-
-float SDK::GetGravity()
-{
-	static auto sv_gravity = H::ConVars.FindVar("sv_gravity");
-	return sv_gravity->GetFloat();
-}
-
-bool SDK::FriendlyFire()
-{
-	static auto mp_friendlyfire = H::ConVars.FindVar("mp_friendlyfire");
-	return mp_friendlyfire->GetBool();
 }
 
 bool SDK::IsLoopback()
@@ -449,38 +440,6 @@ int SDK::GetWinningTeam()
 	if (auto pGameRules = I::TFGameRules())
 		return pGameRules->m_iWinningTeam();
 	return 0;
-}
-
-const char* SDK::GetClassByIndex(const int nClass, bool bLower)
-{
-	static const char* szClassesUpper[] = {
-		"Unknown", "Scout", "Sniper", "Soldier", "Demoman", "Medic", "Heavy", "Pyro", "Spy", "Engineer"
-	};
-	static const char* szClassesLower[] = {
-		"unknown", "scout", "sniper", "soldier", "demoman", "medic", "heavy", "pyro", "spy", "engineer"
-	};
-
-	if (!bLower)
-		return nClass < 10 && nClass > 0 ? szClassesUpper[nClass] : szClassesUpper[0];
-	else
-		return nClass < 10 && nClass > 0 ? szClassesLower[nClass] : szClassesLower[0];
-}
-
-float SDK::AttribHookValue(float value, const char* name, void* econent, void* buffer, bool isGlobalConstString)
-{
-	return S::CAttributeManager_AttribHookValue_Float.Call<float>(value, name, econent, buffer, isGlobalConstString);
-}
-
-float SDK::MaxSpeed(CTFPlayer* pPlayer, bool bIncludeCrouch, bool bIgnoreSpecialAbility)
-{
-	float flSpeed = pPlayer->CalculateMaxSpeed(bIgnoreSpecialAbility);
-
-	if (pPlayer->InCond(TF_COND_SPEED_BOOST) || pPlayer->InCond(TF_COND_HALLOWEEN_SPEED_BOOST))
-		flSpeed *= 1.35f;
-	if (bIncludeCrouch && pPlayer->IsDucking() && pPlayer->IsOnGround())
-		flSpeed /= 3;
-
-	return flSpeed;
 }
 
 EWeaponType SDK::GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryType)
@@ -524,6 +483,7 @@ EWeaponType SDK::GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryTy
 	case TF_WEAPON_PDA_SPY_BUILD:
 	case TF_WEAPON_INVIS:
 	case TF_WEAPON_BUFF_ITEM:
+	case TF_WEAPON_GRAPPLINGHOOK:
 	case TF_WEAPON_ROCKETPACK:
 		return EWeaponType::UNKNOWN;
 	case TF_WEAPON_CLEAVER:
@@ -547,107 +507,25 @@ EWeaponType SDK::GetWeaponType(CTFWeaponBase* pWeapon, EWeaponType* pSecondaryTy
 	case TF_WEAPON_JAR_MILK:
 	case TF_WEAPON_JAR_GAS:
 	case TF_WEAPON_LUNCHBOX:
-	case TF_WEAPON_GRAPPLINGHOOK:
 		return EWeaponType::PROJECTILE;
 	}
 
 	return EWeaponType::HITSCAN;
 }
 
-void SDK::CanAttack(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool& bPrimary, bool& bSecondary, bool& bReloading)
+const char* SDK::GetClassByIndex(const int nClass, bool bLower)
 {
-	bPrimary = bSecondary = bReloading = false;
+	static const char* szClassesUpper[] = {
+		"Unknown", "Scout", "Sniper", "Soldier", "Demoman", "Medic", "Heavy", "Pyro", "Spy", "Engineer"
+	};
+	static const char* szClassesLower[] = {
+		"unknown", "scout", "sniper", "soldier", "demoman", "medic", "heavy", "pyro", "spy", "engineer"
+	};
 
-	if (pWeapon->GetMaxClip1() != WEAPON_NOCLIP && !pWeapon->m_bReloadsSingly())
-	{	// dumb fix
-		float flOldCurtime = I::GlobalVars->curtime;
-		I::GlobalVars->curtime = TICKS_TO_TIME(pLocal->m_nTickBase());
-		pWeapon->CheckReload();
-		I::GlobalVars->curtime = flOldCurtime;
-	}
-
-	bool bCanAttack = pLocal->CanAttack();
-	{
-		static int iStaticItemDefinitionIndex = 0;
-		int iOldItemDefinitionIndex = iStaticItemDefinitionIndex;
-		int iNewItemDefinitionIndex = iStaticItemDefinitionIndex = pWeapon->m_iItemDefinitionIndex();
-
-		if (iNewItemDefinitionIndex != iOldItemDefinitionIndex || !bCanAttack || !pWeapon->m_iClip1())
-			F::Ticks.m_iWait = -1;
-	}
-	if (bCanAttack)
-	{
-		bPrimary = pWeapon->CanPrimaryAttack();
-		bSecondary = pWeapon->CanSecondaryAttack();
-
-		switch (pWeapon->GetWeaponID())
-		{
-		case TF_WEAPON_FLAME_BALL:
-			if (bPrimary)
-			{
-				// do this, otherwise it will be a tick behind
-				float flFrametime = TICK_INTERVAL * 100;
-				float flMeterMult = S::IHasGenericMeter_GetMeterMultiplier.Call<float>(pWeapon->m_pMeter());
-				float flRate = SDK::AttribHookValue(1.f, "item_meter_charge_rate", pWeapon) - 1;
-				float flMult = SDK::AttribHookValue(1.f, "mult_item_meter_charge_rate", pWeapon);
-				float flTankPressure = pLocal->m_flTankPressure() + flFrametime * flMeterMult / (flRate * flMult);
-
-				if (bPrimary && flTankPressure < 100.f)
-					bPrimary = bSecondary = false;
-			}
-			break;
-		case TF_WEAPON_MINIGUN:
-			if (int iState = pWeapon->As<CTFMinigun>()->m_iWeaponState(); iState != AC_STATE_FIRING && iState != AC_STATE_SPINNING || !pWeapon->HasPrimaryAmmoForShot())
-				bPrimary = false;
-			break;
-		case TF_WEAPON_FLAREGUN_REVENGE:
-			if (pCmd->buttons & IN_ATTACK2)
-				bPrimary = false;
-			break;
-		case TF_WEAPON_BAT_WOOD:
-		case TF_WEAPON_BAT_GIFTWRAP:
-			if (!pWeapon->HasPrimaryAmmoForShot())
-				bSecondary = false;
-			break;
-		case TF_WEAPON_MEDIGUN:
-		case TF_WEAPON_BUILDER:
-		case TF_WEAPON_LASER_POINTER:
-			break;
-		case TF_WEAPON_PARTICLE_CANNON:
-			if (float flChargeBeginTime = pWeapon->As<CTFParticleCannon>()->m_flChargeBeginTime(); flChargeBeginTime > 0)
-			{
-				float flTotalChargeTime = TICKS_TO_TIME(pLocal->m_nTickBase()) - flChargeBeginTime;
-				if (flTotalChargeTime < TF_PARTICLE_MAX_CHARGE_TIME)
-				{
-					bPrimary = bSecondary = false;
-					break;
-				}
-			}
-			[[fallthrough]];
-		default:
-			if (pWeapon->GetSlot() != SLOT_MELEE)
-			{
-				bool bAmmo = pWeapon->HasPrimaryAmmoForShot();
-				bool bReload = pWeapon->IsInReload();
-				if (!bAmmo && pWeapon->m_iItemDefinitionIndex() != Soldier_m_TheBeggarsBazooka)
-					bPrimary = bSecondary = false;
-				if (bReload && bAmmo && !bPrimary)
-					bReloading = true;
-			}
-		}
-		if (bPrimary)
-		{
-			switch (pWeapon->GetWeaponID())
-			{
-			case TF_WEAPON_FLAMETHROWER:
-			case TF_WEAPON_FLAME_BALL:
-			case TF_WEAPON_FLAREGUN:
-			case TF_WEAPON_FLAREGUN_REVENGE:
-				if (pLocal->IsUnderwater())
-					bPrimary = bSecondary = false;
-			}
-		}
-	}
+	if (!bLower)
+		return nClass < 10 && nClass > 0 ? szClassesUpper[nClass] : szClassesUpper[0];
+	else
+		return nClass < 10 && nClass > 0 ? szClassesLower[nClass] : szClassesLower[0];
 }
 
 int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* pCmd, bool bTickBase)
@@ -691,6 +569,8 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 
 	switch (pWeapon->GetWeaponID())
 	{
+	case TF_WEAPON_COMPOUND_BOW:
+		return !(pCmd->buttons & IN_ATTACK) && pWeapon->As<CTFPipebombLauncher>()->m_flChargeBeginTime() > 0.f;
 	case TF_WEAPON_PIPEBOMBLAUNCHER:
 	case TF_WEAPON_STICKY_BALL_LAUNCHER:
 	case TF_WEAPON_GRENADE_STICKY_BALL:
@@ -711,16 +591,17 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 	}
 	case TF_WEAPON_SNIPERRIFLE_CLASSIC:
 		return !(pCmd->buttons & IN_ATTACK) && pWeapon->As<CTFSniperRifle>()->m_flChargedDamage() > 0.f;
-	case TF_WEAPON_COMPOUND_BOW:
-		return !(pCmd->buttons & IN_ATTACK) && pWeapon->As<CTFPipebombLauncher>()->m_flChargeBeginTime() > 0.f;
 	case TF_WEAPON_PARTICLE_CANNON:
-		if (float flChargeBeginTime = pWeapon->As<CTFParticleCannon>()->m_flChargeBeginTime(); flChargeBeginTime > 0)
+	{
+		float flChargeBeginTime = pWeapon->As<CTFParticleCannon>()->m_flChargeBeginTime();
+		if (flChargeBeginTime > 0)
 		{
 			float flTotalChargeTime = flTickBase - flChargeBeginTime;
 			if (flTotalChargeTime >= TF_PARTICLE_MAX_CHARGE_TIME)
 				return 1;
 		}
 		break;
+	}
 	case TF_WEAPON_CLEAVER: // we can randomly use attack2 to fire
 	case TF_WEAPON_JAR:
 	case TF_WEAPON_JAR_MILK:
@@ -748,14 +629,14 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 		if (!G::CanPrimaryAttack || !(pCmd->buttons & IN_ATTACK) || pWeapon->As<CTFGrapplingHook>()->m_hProjectile())
 			return false;
 
-		static auto tf_grapplinghook_max_distance = H::ConVars.FindVar("tf_grapplinghook_max_distance");
-		const float flGrappleDistance = tf_grapplinghook_max_distance->GetFloat();
-
-		Vec3 vPos, vAngle; GetProjectileFireSetup(pLocal, pCmd->viewangles, { 23.5f, -8.f, -3.f }, vPos, vAngle, 2000.f);
+		Vec3 vPos, vAngle; GetProjectileFireSetup(pLocal, pCmd->viewangles, { 23.5f, -8.f, -3.f }, vPos, vAngle, false);
 		Vec3 vForward; Math::AngleVectors(vAngle, &vForward);
 
 		CGameTrace trace = {};
-		CTraceFilterWorldAndPropsOnly filter = {};
+		CTraceFilterHitscan filter = {};
+		filter.pSkip = pLocal;
+		static auto tf_grapplinghook_max_distance = H::ConVars.FindVar("tf_grapplinghook_max_distance");
+		const float flGrappleDistance = tf_grapplinghook_max_distance->GetFloat();
 		Trace(vPos, vPos + vForward * flGrappleDistance, MASK_SOLID, &filter, &trace);
 		return trace.DidHit() && !(trace.surface.flags & SURF_SKY);
 	}
@@ -788,10 +669,6 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 		if (G::CanSecondaryAttack && pCmd->buttons & IN_ATTACK2)
 			return 1;
 		break;
-	case TF_WEAPON_MEDIGUN:
-		if (pWeapon->As<CWeaponMedigun>()->m_bHealing())
-			return false;
-		break;
 	}
 
 	switch (pWeapon->m_iItemDefinitionIndex())
@@ -821,6 +698,23 @@ int SDK::IsAttacking(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, const CUserCmd* 
 	return G::CanPrimaryAttack && pCmd->buttons & IN_ATTACK ? 1 : G::Reloading && pCmd->buttons & IN_ATTACK ? 2 : 0;
 }
 
+float SDK::MaxSpeed(CTFPlayer* pPlayer, bool bIncludeCrouch, bool bIgnoreSpecialAbility)
+{
+	float flSpeed = pPlayer->CalculateMaxSpeed(bIgnoreSpecialAbility);
+
+	if (pPlayer->InCond(TF_COND_SPEED_BOOST) || pPlayer->InCond(TF_COND_HALLOWEEN_SPEED_BOOST))
+		flSpeed *= 1.35f;
+	if (bIncludeCrouch && pPlayer->IsDucking() && pPlayer->IsOnGround())
+		flSpeed /= 3;
+
+	return flSpeed;
+}
+
+float SDK::AttribHookValue(float value, const char* name, void* econent, void* buffer, bool isGlobalConstString)
+{
+	return S::CAttributeManager_AttribHookFloat.Call<float>(value, name, econent, buffer, isGlobalConstString);
+}
+
 void SDK::FixMovement(CUserCmd* pCmd, const Vec3& vCurAngle, const Vec3& vTargetAngle)
 {
 	bool bCurOOB = fabsf(Math::NormalizeAngle(vCurAngle.x)) > 90.f;
@@ -832,7 +726,7 @@ void SDK::FixMovement(CUserCmd* pCmd, const Vec3& vCurAngle, const Vec3& vTarget
 
 	float flCurYaw = vCurAngle.y + (bCurOOB ? 180.f : 0.f);
 	float flTargetYaw = vTargetAngle.y + (bTargetOOB ? 180.f : 0.f);
-	float flYaw = Math::Deg2Rad(flTargetYaw - flCurYaw + vMoveAng.y);
+	float flYaw = DEG2RAD(flTargetYaw - flCurYaw + vMoveAng.y);
 
 	pCmd->forwardmove = cos(flYaw) * flSpeed;
 	pCmd->sidemove = sin(flYaw) * flSpeed * (bTargetOOB ? -1 : 1);
@@ -854,7 +748,7 @@ bool SDK::StopMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 
 	if (G::Attacking != 1)
 	{
-		float flDirection = Math::VectorAngles(-pLocal->m_vecVelocity()).y;
+		float flDirection = Math::VectorAngles(pLocal->m_vecVelocity() * -1).y;
 		pCmd->viewangles = { 90, flDirection, 0 };
 		pCmd->sidemove = 0; pCmd->forwardmove = 0;
 		return true;
@@ -870,7 +764,7 @@ bool SDK::StopMovement(CTFPlayer* pLocal, CUserCmd* pCmd)
 	}
 }
 
-Vec3 SDK::ComputeMove(const CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom, const Vec3& vTo)
+Vec3 SDK::ComputeMove(const CUserCmd* pCmd, CTFPlayer* pLocal, Vec3& vFrom, Vec3& vTo)
 {
 	const Vec3 vDiff = vTo - vFrom;
 	if (!vDiff.Length2D())
@@ -878,8 +772,8 @@ Vec3 SDK::ComputeMove(const CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom
 
 	Vec3 vSilent = vDiff.To2D();
 	Vec3 vAngle = Math::VectorAngles(vSilent);
-	const float flYaw = Math::Deg2Rad(vAngle.y - pCmd->viewangles.y);
-	const float flPitch = Math::Deg2Rad(vAngle.x - pCmd->viewangles.x);
+	const float flYaw = DEG2RAD(vAngle.y - pCmd->viewangles.y);
+	const float flPitch = DEG2RAD(vAngle.x - pCmd->viewangles.x);
 
 	Vec3 vMove = { cos(flYaw) * 450.f, -sin(flYaw) * 450.f, -cos(flPitch) * 450.f };
 	if (!(I::EngineTrace->GetPointContents(pLocal->GetShootPos()) & CONTENTS_WATER)) // only apply upmove in water
@@ -888,7 +782,7 @@ Vec3 SDK::ComputeMove(const CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom
 	return vMove;
 }
 
-void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom, const Vec3& vTo, float flScale)
+void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, Vec3& vFrom, Vec3& vTo, float flScale)
 {
 	const auto vResult = ComputeMove(pCmd, pLocal, vFrom, vTo);
 
@@ -897,7 +791,7 @@ void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vFrom, const Vec
 	pCmd->upmove = vResult.z * flScale;
 }
 
-void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vTo, float flScale)
+void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, Vec3& vTo, float flScale)
 {
 	Vec3 vLocalPos = pLocal->m_vecOrigin();
 	WalkTo(pCmd, pLocal, vLocalPos, vTo, flScale);
@@ -905,10 +799,10 @@ void SDK::WalkTo(CUserCmd* pCmd, CTFPlayer* pLocal, const Vec3& vTo, float flSca
 
 
 
-void SDK::GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vOffset, Vec3& vPosOut, Vec3& vAngOut, float flForward, float flCutoff, bool bInterp, bool bAllowFlip)
+void SDK::GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vOffset, Vec3& vPosOut, Vec3& vAngOut, bool bPipes, bool bInterp, bool bAllowFlip)
 {
 	static auto cl_flipviewmodels = H::ConVars.FindVar("cl_flipviewmodels");
-	if (bAllowFlip && cl_flipviewmodels->GetBool())
+	if (bAllowFlip && FNV1A::Hash32(cl_flipviewmodels->GetString()) == FNV1A::Hash32Const("1"))
 		vOffset.y *= -1.f;
 
 	const Vec3 vShootPos = bInterp ? pPlayer->GetEyePosition() : pPlayer->GetShootPos();
@@ -916,25 +810,22 @@ void SDK::GetProjectileFireSetup(CTFPlayer* pPlayer, const Vec3& vAngIn, Vec3 vO
 	Vec3 vForward, vRight, vUp; Math::AngleVectors(vAngIn, &vForward, &vRight, &vUp);
 	vPosOut = vShootPos + (vForward * vOffset.x) + (vRight * vOffset.y) + (vUp * vOffset.z);
 
-	if (flForward)
+	if (bPipes)
+		vAngOut = vAngIn;
+	else
 	{
-		Vec3 vEndPos = vShootPos + vForward * flForward;
+		Vec3 vEndPos = vShootPos + vForward * 2000.f;
 
-		if (flCutoff < 1.f)
-		{
-			CGameTrace trace = {};
-			CTraceFilterCollideable filter = {};
-			filter.pSkip = pPlayer;
-			filter.iType = SKIP_CHECK;
-			Trace(vShootPos, vEndPos, MASK_SOLID, &filter, &trace);
-			if (trace.DidHit() && trace.fraction > flCutoff)
-				vEndPos = trace.endpos;
-		}
+		CGameTrace trace = {};
+		CTraceFilterCollideable filter = {};
+		filter.pSkip = pPlayer;
+		filter.iType = SKIP_CHECK;
+		Trace(vShootPos, vEndPos, MASK_SOLID, &filter, &trace);
+		if (trace.DidHit() && trace.fraction > 0.1f)
+			vEndPos = trace.endpos;
 
 		vAngOut = Math::VectorAngles(vEndPos - vPosOut);
 	}
-	else
-		vAngOut = vAngIn;
 }
 
 bool SDK::CleanScreenshot()

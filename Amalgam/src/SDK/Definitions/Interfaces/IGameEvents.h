@@ -53,6 +53,8 @@ public:
 	virtual IGameEvent* UnserializeEvent(bf_read* buf) = 0;
 };
 
+MAKE_INTERFACE_VERSION(IGameEventManager2, GameEventManager, "engine.dll", "GAMEEVENTSMANAGER002");
+
 class IGameEventListener
 {
 public:
@@ -76,5 +78,3 @@ public:
 	virtual bool SerializeKeyValues(KeyValues* event, bf_write* buf, CGameEvent* eventtype = nullptr) = 0;
 	virtual KeyValues* UnserializeKeyValue(bf_read* msg) = 0;
 };
-
-MAKE_INTERFACE_VERSION(IGameEventManager2, GameEventManager, "engine.dll", "GAMEEVENTSMANAGER002");

@@ -1,5 +1,4 @@
 #include "MD5.h"
-
 #include <Windows.h>
 
 #define F1(x, y, z) (z ^ (x & (y ^ z)))

@@ -1,4 +1,5 @@
 #pragma once
+#include "VGUI.h"
 #include "../Types.h"
 
 typedef unsigned long HTexture;

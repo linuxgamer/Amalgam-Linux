@@ -2,8 +2,8 @@
 #include "Interface.h"
 #include "../Misc/BaseTypes.h"
 
-class IVirtualMemorySection;
 typedef size_t(*MemAllocFailHandler_t)(size_t);
+class IVirtualMemorySection;
 
 struct GenericMemoryStat_t
 {

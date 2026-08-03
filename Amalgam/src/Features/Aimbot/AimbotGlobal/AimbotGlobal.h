@@ -4,11 +4,10 @@
 
 enum BOUNDS_HITBOXES
 {
-	BOUNDS_HEAD, BOUNDS_BODY, BOUNDS_FEET, BOUNDS_COUNT
+	BOUNDS_HEAD, BOUNDS_BODY, BOUNDS_FEET
 };
 
 Enum(Target, Unknown, Player, Sentry, Dispenser, Teleporter, Sticky, NPC, Bomb)
-Enum(ShouldIgnore, None, Dormant = 1 << 0, Ignored = 1 << 1)
 
 struct Target_t
 {
@@ -28,21 +27,19 @@ struct Target_t
 class CAimbotGlobal
 {
 public:
-	std::vector<Target_t> ManageTargets(std::vector<Target_t>(*GetTargets)(CTFPlayer* pLocal, CTFWeaponBase* pWeapon), CTFPlayer* pLocal, CTFWeaponBase* pWeapon,
-		int iMethod = Vars::Aimbot::General::TargetSelection.Value, int iMaxTargets = Vars::Aimbot::General::MaxTargets.Value);
-	void SortTargetsPre(std::vector<Target_t>& vTargets, int iMethod);
-	void SortTargetsPost(std::vector<Target_t>& vTargets, int iMethod);
+	void SortTargets(std::vector<Target_t>&, int iMethod);
+	void SortPriority(std::vector<Target_t>&);
 
-	float GetAimFOV();
-	bool EntityCenterInFOV(CBaseEntity* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo);
-	bool PlayerBoneInFOV(CTFPlayer* pTarget, const Vec3& vLocalPos, const Vec3& vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
+	bool PlayerBoneInFOV(CTFPlayer* pTarget, Vec3 vLocalPos, Vec3 vLocalAngles, float& flFOVTo, Vec3& vPos, Vec3& vAngleTo, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs, float flFOVOverride = -1.f);
 	bool IsHitboxValid(CBaseEntity* pEntity, int nHitbox, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
 	bool IsHitboxValid(int nHitbox, int iHitboxes = Vars::Aimbot::Projectile::HitboxesEnum::Head | Vars::Aimbot::Projectile::HitboxesEnum::Body | Vars::Aimbot::Projectile::HitboxesEnum::Feet);
 	bool ShouldMultipoint(CBaseEntity* pEntity = nullptr, int nHitbox = -1, int iHitboxes = Vars::Aimbot::Hitscan::HitboxesEnum::Head | Vars::Aimbot::Hitscan::HitboxesEnum::Body | Vars::Aimbot::Hitscan::HitboxesEnum::Pelvis | Vars::Aimbot::Hitscan::HitboxesEnum::Arms | Vars::Aimbot::Hitscan::HitboxesEnum::Legs);
-	bool ShouldAimAtAngle(Vec3 vAngles);
 
-	bool ShouldIgnore(CBaseEntity* pTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, int iFunctionFlags = ShouldIgnoreEnum::Dormant | ShouldIgnoreEnum::Ignored, int iTargetFlags = Vars::Aimbot::General::Target.Value, int iIgnoreFlags = Vars::Aimbot::General::Ignore.Value);
+	// iIgnoreOverride: pass a Vars::Aimbot::General::IgnoreEnum bitmask to use INSTEAD of the General
+	// aim Ignore dropdown (e.g. the knife's own Backstab ignore). -1 = use General::Ignore as normal.
+	bool ShouldIgnore(CBaseEntity* pTarget, CTFPlayer* pLocal, CTFWeaponBase* pWeapon, int iIgnoreOverride = -1);
 	int GetPriority(int iIndex);
+	bool FriendlyFire();
 
 	bool ShouldAim();
 	bool ShouldHoldAttack(CTFWeaponBase* pWeapon);

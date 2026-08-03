@@ -1,7 +1,6 @@
 #pragma once
 #include "CBaseEntity.h"
-
-class CStudioHdr;
+#include "../Misc/Studio.h"
 
 MAKE_SIGNATURE(CBaseAnimating_FrameAdvance, "client.dll", "48 89 5C 24 ? 48 89 6C 24 ? 57 48 81 EC ? ? ? ? 44 0F 29 54 24", 0x0);
 MAKE_SIGNATURE(CBaseAnimating_GetBonePosition, "client.dll", "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? 8B DA 49 8B F1", 0x0);
@@ -37,9 +36,9 @@ public:
 		return *reinterpret_cast<std::array<float, 24>*>(uintptr_t(this) + nOffset);
 	}
 
-	NETVAR_OFF(m_pStudioHdr, CStudioHdr*, "CBaseAnimating", "m_nMuzzleFlashParity", 16);
-	NETVAR_OFF(m_CachedBoneData, CUtlVector<matrix3x4>, "CBaseAnimating", "m_hLightingOrigin", -88);
+	NETVAR_OFF(GetModelPtr, CStudioHdr*, "CBaseAnimating", "m_nMuzzleFlashParity", 16);
 	NETVAR_OFF(m_bSequenceLoops, bool, "CBaseAnimating", "m_flFadeScale", 13);
+	NETVAR_OFF(m_CachedBoneData, CUtlVector<matrix3x4>, "CBaseAnimating", "m_hLightingOrigin", -88);
 
 	VIRTUAL_ARGS(GetAttachment, bool, 71, (int number, Vec3& origin), this, number, std::ref(origin))
 	VIRTUAL_ARGS(FireEvent, void, 175, (const Vector& origin, const QAngle& angles, int event, const char* options), this, std::ref(origin), std::ref(angles), event, options);
@@ -56,7 +55,6 @@ public:
 		return bReturn;
 	}
 
-	mstudiohitboxset_t* GetHitboxSet();
 	int GetHitboxGroup(int nHitbox);
 	int GetNumOfHitboxes();
 	Vec3 GetHitboxOrigin(matrix3x4* aBones, int nHitbox, Vec3 vOffset = {});

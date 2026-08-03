@@ -5,7 +5,10 @@ MAKE_SIGNATURE(CBaseAnimating_SetSequence, "client.dll", "40 53 48 83 EC ? 48 8B
 MAKE_HOOK(CBaseAnimating_SetSequence, S::CBaseAnimating_SetSequence(), void,
 	void* rcx, int nSequence)
 {
-	DEBUG_RETURN(CBaseAnimating_SetSequence, rcx, nSequence);
+#ifdef DEBUG_HOOKS
+	if (!Vars::Hooks::CBaseAnimating_SetSequence[DEFAULT_BIND])
+		return CALL_ORIGINAL(rcx, nSequence);
+#endif
 
 	auto pEntity = reinterpret_cast<CBaseAnimating*>(rcx);
 	if (pEntity->m_nSequence() != nSequence && !pEntity->m_bSequenceLoops())

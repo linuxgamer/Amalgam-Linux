@@ -16,8 +16,8 @@ private:
 	std::unordered_map<CBaseEntity*, ArrowCache_t> m_mCache = {};
 
 public:
-	void Store();
+	void Store(CTFPlayer* pLocal);
 	void Draw(CTFPlayer* pLocal);
 };
 
-ADD_FEATURE(COffscreenArrows, OffscreenArrows);
+ADD_FEATURE(COffscreenArrows, Arrows);

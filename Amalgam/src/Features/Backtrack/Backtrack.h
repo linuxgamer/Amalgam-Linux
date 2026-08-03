@@ -59,7 +59,7 @@ public:
 	float GetFakeLatency();
 	float GetFakeInterp();
 	float GetWindow();
-	void SetLerp();
+	void SetLerp(IGameEvent* pEvent);
 	int GetAnticipatedChoke(int iMethod = Vars::Aimbot::General::AimType.Value);
 
 	void ResolverUpdate(CBaseEntity* pEntity);

@@ -1,16 +1,17 @@
 #include "ConVars.h"
 
 #include "../../Definitions/Interfaces/ICVar.h"
-#include "../../../Utils/Hash/FNV1A.h"
 
 bool CConVars::Unlock()
 {
 	if (!m_bUnlocked)
 	{
-		for (ConCommandBase* pBase = I::CVar->GetCommands(); pBase; pBase = pBase->m_pNext)
+		ConCommandBase* pCmdBase = I::CVar->GetCommands();
+		while (pCmdBase != nullptr)
 		{
-			m_mFlagMap[pBase] = pBase->m_nFlags;
-			pBase->m_nFlags &= ~(FCVAR_HIDDEN | FCVAR_DEVELOPMENTONLY | FCVAR_CHEAT | FCVAR_NOT_CONNECTED);
+			m_mFlagMap[pCmdBase] = pCmdBase->m_nFlags;
+			pCmdBase->m_nFlags &= ~(FCVAR_HIDDEN | FCVAR_DEVELOPMENTONLY | FCVAR_CHEAT | FCVAR_NOT_CONNECTED);
+			pCmdBase = pCmdBase->m_pNext;
 		}
 		m_bUnlocked = true;
 
@@ -31,17 +32,6 @@ bool CConVars::Restore()
 		return true;
 	}
 	return false;
-}
-
-bool CConVars::Modify(bool bUnlock)
-{
-	if (bUnlock == m_bUnlocked)
-		return false;
-
-	if (bUnlock)
-		return Unlock();
-	else
-		return Restore();
 }
 
 ConVar* CConVars::FindVar(const char* sCVar)
